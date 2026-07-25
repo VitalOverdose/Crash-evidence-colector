@@ -1,0 +1,21 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Kernel Memory Dump File
+=== CEC COMMAND: !analyze -v ===
+WHEA_UNCORRECTABLE_ERROR (124)
+BUGCHECK_CODE: 124
+BUGCHECK_P1: 0
+BUGCHECK_P2: ffff810012340000
+BUGCHECK_P3: 0
+BUGCHECK_P4: 0
+PROCESS_NAME: System
+MODULE_NAME: nt
+IMAGE_NAME: ntkrnlmp.exe
+STACK_TEXT:
+ffff8100`11110000 fffff805`10001000 : 0 0 0 0 : nt!KeBugCheckEx+0x0
+=== CEC COMMAND: !errrec 0xFFFF810012340000 ===
+Error Source    : Machine Check Exception
+Error Type      : Cache Hierarchy Error
+Processor APIC ID : 4
+MCi_STATUS      : 0xbea0000000000108
+Bank            : 5
+=== CEC ANALYSIS END ===

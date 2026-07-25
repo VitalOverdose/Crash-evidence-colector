@@ -1,0 +1,2 @@
+TEST-DATA MODE: copied signed-driver inventory
+Sample Device | 1.2.3.4 | Signed=True | sample.inf

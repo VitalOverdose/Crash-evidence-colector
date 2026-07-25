@@ -1,0 +1,4 @@
+TEST-DATA MODE: copied supported storage-health output
+FriendlyName: Sample NVMe
+HealthStatus: Healthy
+OperationalStatus: OK

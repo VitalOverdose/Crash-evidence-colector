@@ -1,0 +1,6 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Mini Kernel Dump File
+=== CEC COMMAND: !analyze -v ===
+BUGCHECK_CODE: 50
+BUGCHECK_P1: ffff800000001000
+*** ERROR: Unable to read memory at ffff800000001000

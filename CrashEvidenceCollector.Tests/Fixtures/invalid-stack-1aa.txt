@@ -1,0 +1,56 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Mini Kernel Dump File: Only registers and stack trace are available
+Debug session time: Sat Jul 25 22:25:36.000 2026 (UTC + 1:00)
+=== CEC COMMAND: !analyze -v ===
+EXCEPTION_ON_INVALID_STACK (1aa)
+Arg1: ffff8a0012345000
+Arg2: 0000000000000007
+Arg3: ffff8a0012346000
+Arg4: ffff8a0012347000
+KEY_VALUES_STRING: 1
+    Key  : Analysis.Elapsed.mSec
+    Value: 1264
+BUGCHECK_CODE:  1aa
+BUGCHECK_P1: ffff8a0012345000
+BUGCHECK_P2: 7
+BUGCHECK_P3: ffff8a0012346000
+BUGCHECK_P4: ffff8a0012347000
+PROCESS_NAME:  SearchIndexer.exe
+CONTEXT:  ffff8a0012346000 -- (.cxr 0xffff8a0012346000)
+EXCEPTION_RECORD:  ffff8a0012347000 -- (.exr 0xffff8a0012347000)
+EXCEPTION_CODE: (NTSTATUS) 0xc0000005
+EXCEPTION_PARAMETER1: 0000000000000001
+EXCEPTION_PARAMETER2: 0000000000000010
+READ_ADDRESS: ffff8a0011110000
+UNKNOWN_FUTURE_FIELD: retain-this-value
+STACK_TEXT:
+ffff8a00`12344ee8 fffff800`01234000 : 00000000`000001aa 00000000`00000000 : sampleflt!CorruptStack+0x2a
+ffff8a00`12344f70 fffff800`00102030 : 00000000`00000000 00000000`00000000 : nt!KiDispatchException+0x190
+SYMBOL_NAME:  sampleflt!CorruptStack+2a
+MODULE_NAME: sampleflt
+IMAGE_NAME:  sampleflt.sys
+IMAGE_VERSION: 4.2.1.0
+FAILURE_BUCKET_ID:  AV_sampleflt!CorruptStack
+FAILURE_ID_HASH: {11111111-2222-3333-4444-555555555555}
+=== CEC COMMAND: .cxr 0xFFFF8A0012346000 ===
+rax=0000000000000000 rbx=ffff8a0012345000 rcx=ffff8a0012345000
+rsp=ffff8a0012344ee8 rbp=ffff8a0012344f70 rip=fffff80000102030
+=== CEC COMMAND: .exr 0xFFFF8A0012347000 ===
+ExceptionAddress: fffff80000102030 (nt!RtlpGetStackLimitsEx+0x30)
+   ExceptionCode: c0000005 (Access violation)
+  ExceptionFlags: 00000000
+NumberParameters: 2
+   Parameter[0]: 0000000000000000
+   Parameter[1]: ffff8a0012345000
+=== CEC COMMAND: r ===
+rax=0000000000000000 rbx=ffff8a0012345000 rcx=ffff8a0012345000
+rsp=ffff8a0012344ee8 rbp=ffff8a0012344f70 rip=fffff80000102030
+=== CEC COMMAND: kv ===
+ # Child-SP          RetAddr               : Args to Child                                                           : Call Site
+00 ffff8a00`12344ee8 fffff800`01234000 : 00000000`000001aa 00000000`00000000 : sampleflt!CorruptStack+0x2a
+01 ffff8a00`12344f70 fffff800`00102030 : 00000000`00000000 00000000`00000000 : nt!KiDispatchException+0x190
+=== CEC COMMAND: lm t n ===
+start             end                 module name
+fffff800`01230000 fffff800`0124f000   sampleflt
+fffff800`00000000 fffff800`01000000   nt
+=== CEC ANALYSIS END ===

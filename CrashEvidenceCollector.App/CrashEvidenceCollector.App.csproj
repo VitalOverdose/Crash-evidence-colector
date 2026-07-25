@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CrashEvidenceCollector.Core\CrashEvidenceCollector.Core.csproj" />
+    <ProjectReference Include="..\CrashEvidenceCollector.Helper\CrashEvidenceCollector.Helper.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <Target Name="CopyElevatedHelper" AfterTargets="Build">
+    <ItemGroup><HelperFiles Include="$(MSBuildProjectDirectory)\..\CrashEvidenceCollector.Helper\bin\$(Configuration)\net10.0-windows\CrashEvidenceCollector.Helper.*" /></ItemGroup>
+    <Copy SourceFiles="@(HelperFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

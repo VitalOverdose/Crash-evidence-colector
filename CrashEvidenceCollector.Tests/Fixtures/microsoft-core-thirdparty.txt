@@ -1,0 +1,15 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Kernel Memory Dump File
+=== CEC COMMAND: !analyze -v ===
+BUGCHECK_CODE: d1
+BUGCHECK_P1: ffff810011110000
+BUGCHECK_P2: 2
+BUGCHECK_P3: 1
+BUGCHECK_P4: fffff80510001000
+PROCESS_NAME: SearchIndexer.exe
+MODULE_NAME: nt
+IMAGE_NAME: ntoskrnl.exe
+STACK_TEXT:
+ffff8100`00001000 fffff805`10001000 : 0 0 0 0 : nt!KiPageFault+0x101
+ffff8100`00001080 fffff805`22220000 : 0 0 0 0 : vendorfilter!PreOperationCallback+0x33
+=== CEC ANALYSIS END ===

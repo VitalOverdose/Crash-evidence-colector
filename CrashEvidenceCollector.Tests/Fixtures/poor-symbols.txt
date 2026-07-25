@@ -1,0 +1,17 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Mini Kernel Dump File
+*** WARNING: Unable to verify timestamp for mystery.sys
+*** ERROR: Module load completed but symbols could not be loaded for mystery.sys
+***** Kernel symbols are WRONG.
+=== CEC COMMAND: !analyze -v ===
+BUGCHECK_CODE: d1
+BUGCHECK_P1: ffff800000001000
+BUGCHECK_P2: 2
+BUGCHECK_P3: 0
+BUGCHECK_P4: ffff800000002000
+PROCESS_NAME: system
+MODULE_NAME: mystery
+IMAGE_NAME: mystery.sys
+STACK_TEXT:
+ffff9000`11110000 ffff8000`22220000 : 0 0 0 0 : mystery!???
+=== CEC ANALYSIS END ===

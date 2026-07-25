@@ -1,0 +1,23 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Kernel Memory Dump File
+=== CEC COMMAND: !analyze -v ===
+BUGCHECK_CODE: 3b
+BUGCHECK_P1: c0000005
+BUGCHECK_P2: fffff80512345678
+BUGCHECK_P3: ffffc90187654321
+BUGCHECK_P4: 0
+PROCESS_NAME: sample.exe
+EXCEPTION_CODE: c0000005
+EXCEPTION_PARAMETER1: 0
+EXCEPTION_PARAMETER2: ffffffffffffffff
+FAULTING_IP: vendorx!WritePacket+0x12
+SYMBOL_NAME: vendorx!WritePacket+12
+MODULE_NAME: vendorx
+IMAGE_NAME: vendorx.sys
+STACK_TEXT:
+ffffc901`11110000 fffff805`12345678 : 0 0 0 0 : vendorx!WritePacket+0x12
+ffffc901`11110080 fffff805`10001000 : 0 0 0 0 : nt!KiSystemServiceExit+0x25
+=== CEC COMMAND: lm ===
+fffff805`12340000 fffff805`12350000 vendorx
+fffff805`10000000 fffff805`11000000 nt
+=== CEC ANALYSIS END ===

@@ -1,0 +1,21 @@
+Microsoft (R) Windows Debugger Version 10.0 AMD64
+Kernel Bitmap Dump File
+=== CEC COMMAND: !analyze -v ===
+DRIVER_POWER_STATE_FAILURE (9f)
+Arg1: 0000000000000003
+Arg2: ffffa00111110000
+Arg3: ffffa00122220000
+Arg4: ffffa00133330000
+BUGCHECK_CODE: 9f
+PROCESS_NAME: System
+MODULE_NAME: pci
+IMAGE_NAME: pci.sys
+FAILURE_BUCKET_ID: 0x9F_3_IMAGE_pci.sys
+STACK_TEXT:
+ffffa001`00001000 fffff800`00002000 : 0 0 0 0 : nt!KeBugCheckEx+0x0
+ffffa001`00001080 fffff800`00003000 : 0 0 0 0 : pci!PciPowerUpDevice+0x41
+=== CEC COMMAND: !irp 0xFFFFA00133330000 ===
+Irp is active with 4 stacks 3 is current
+ >[ 16, 2]   0 e1 ffffa00144440000 00000000 00000000-00000000 Success Error Cancel pending
+	       \Driver\vendorpower
+=== CEC ANALYSIS END ===

@@ -1,0 +1,2 @@
+TEST-DATA MODE: copied Plug and Play inventory
+OK | System | Sample PCI Device | PCI\VEN_TEST

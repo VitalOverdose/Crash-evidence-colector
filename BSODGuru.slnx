@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="CrashEvidenceCollector.App/CrashEvidenceCollector.App.csproj" />
+  <Project Path="CrashEvidenceCollector.Core/CrashEvidenceCollector.Core.csproj" />
+  <Project Path="CrashEvidenceCollector.Helper/CrashEvidenceCollector.Helper.csproj" />
+  <Project Path="CrashEvidenceCollector.Tests/CrashEvidenceCollector.Tests.csproj" />
+  <Project Path="CrashEvidenceCollector.WorkflowHarness/CrashEvidenceCollector.WorkflowHarness.csproj" />
+</Solution>

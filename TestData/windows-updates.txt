@@ -1,0 +1,3 @@
+TEST-DATA MODE: copied Windows update history
+HotFixID: KB9999999
+InstalledOn: 2026-07-12

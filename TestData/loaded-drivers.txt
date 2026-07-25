@@ -1,0 +1,2 @@
+TEST-DATA MODE: copied loaded-driver inventory
+sample.sys, Sample Driver, Running, Signed
