@@ -82,14 +82,21 @@ public sealed class DumpAnalysisService(StructuredLog log)
             var analysis = parser.Parse(stdout, stderr, metadata); analysis.UnsupportedCommands.AddRange(unsupported);
             analysis.Symbols.SymbolPath = metadata.DebuggerPath == "TEST-DATA fixture" ? "TEST-DATA saved debugger output" : $"srv*{Path.Combine(AppPaths.StateDirectory, "Symbols")}*https://msdl.microsoft.com/download/symbols";
             metadata.DumpType = DumpClassifier.Refine(metadata.DumpType, stdout); metadata.Architecture = DumpClassifier.DetectArchitecture(stdout);
-            if (string.IsNullOrWhiteSpace(analysis.Analyze.BugCheckCode)) analysis.Analyze.BugCheckCode = incident.BugCheckCode;
+            if (string.IsNullOrWhiteSpace(analysis.Analyze.BugCheckCode))
+            {
+                analysis.Analyze.BugCheckCode = incident.BugCheckCode;
+                analysis.Analyze.BugCheckCodeFromSelectedIncidentFallback = !string.IsNullOrWhiteSpace(incident.BugCheckCode);
+            }
             if (analysis.Analyze.BugCheckParameters.Count == 0 && incident.Parameters is not null) analysis.Analyze.BugCheckParameters.AddRange(incident.Parameters);
             if (NumericParser.TryParse(analysis.Analyze.BugCheckCode, out var parsedCode)) analysis.DecodedParameters.AddRange(BugCheckKnowledge.DecodeParameters(parsedCode, analysis.Analyze.BugCheckParameters));
             analysis.FamilyAnalysis = BugCheckFamilyAnalyzer.Analyze(analysis);
             EnrichModuleMetadata(analysis.Modules, rawDirectory);
             analysis.Quality = AnalysisQualityScorer.Score(analysis);
             analysis.Assessment = CulpritAssessmentEngine.Assess(analysis);
-            analysis.Fingerprint = CrossIncidentEngine.CreateFingerprint(incident.Id, analysis);
+            // A fallback code with no debugger analysis is useful context, but it
+            // must not create a historical dump fingerprint that looks parsed.
+            if (!analysis.Analyze.BugCheckCodeFromSelectedIncidentFallback)
+                analysis.Fingerprint = CrossIncidentEngine.CreateFingerprint(incident.Id, analysis);
             analysis.Recommendations.AddRange(RecommendationEngine.Build(analysis, machine, events));
             results.Add(analysis);
         }

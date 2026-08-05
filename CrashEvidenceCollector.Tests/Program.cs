@@ -36,6 +36,18 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("Crash-time selection rejects post-boot dump and report timestamps", CrashTimeSelection)
     ,("Timeline uses separate crash and boot anchors", DualAnchorTimeline)
     ,("0x1AA separates failure location, process context and cause", InvalidStackConclusion)
+    ,("Installed programs are inventoried and correlated without blame", InstalledProgramInventoryHandling)
+    ,("Winget metadata parsing matches safely and rejects ambiguity", WingetMetadataParsing)
+    ,("Timed-out matching dump remains provisionally associated", TimedOutDumpAssociation)
+    ,("Raw bugcheck is captured before symbol-dependent analysis", EarlyBugcheckCapture)
+    ,("Application reports do not demand a kernel dump", ApplicationReportWithoutDump)
+    ,("Crash metrics deduplicate reports and stack daily incident types", CrashMetricsHandling)
+    ,("Monitoring log survives torn writes and flags heat at low load", MonitoringPipeline)
+    ,("0x1A is decoded and timeline bursts collapse without losing records", MemoryManagementAndBurstCollapse)
+    ,("A declined administrator prompt is reported above the headline", DeclinedElevationIsLoud)
+    ,("A contradicted Event 6008 shutdown time is rejected", ContradictedShutdownTime)
+    ,("Destroyed-stack buckets and cross-layer access violations are recognised", CorruptionSignals)
+    ,("Application failures report their faulting module and exception", ApplicationFailureDetail)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -45,6 +57,255 @@ foreach (var test in tests)
 }
 Console.WriteLine($"{tests.Length - failed}/{tests.Length} tests passed.");
 return failed == 0 ? 0 : 1;
+
+static Task InstalledProgramInventoryHandling()
+{
+    var crash = DateTimeOffset.Parse("2026-07-13T20:00:00Z");
+    var json = """
+    [
+      {"name":"<script>Evil RGB</script>","version":"1.0","publisher":"Vendor","installDate":"2026-07-12T00:00:00+00:00","installLocation":null,"source":"Fixture"},
+      {"name":"Old Tool","version":"2.0","publisher":null,"installDate":"2026-06-01T00:00:00+00:00","installLocation":null,"source":"Fixture"},
+      {"name":"After Crash","version":"3.0","publisher":null,"installDate":"2026-07-14T00:00:00+00:00","installLocation":null,"source":"Fixture"},
+      {"name":"Old Tool","version":"2.0","publisher":null,"installDate":"2026-06-01T00:00:00+00:00","installLocation":null,"source":"Fixture duplicate"},
+      {"name":"No Date","version":null,"publisher":null,"installDate":null,"installLocation":null,"source":"Fixture"}
+    ]
+    """;
+    var programs = InstalledProgramInventory.Parse(json);
+    Assert(programs.Count == 4, $"Expected 4 deduplicated programs, got {programs.Count}.");
+    var recent = InstalledProgramInventory.RecentInstalls(programs, crash);
+    Assert(recent.Count == 1 && recent[0].Name.Contains("Evil RGB", StringComparison.Ordinal), "Only the pre-crash install inside the 14-day window should be recent.");
+    Assert(InstalledProgramInventory.ParseInstallDate("20260710") is not null, "Registry yyyyMMdd install date was not parsed.");
+    Assert(InstalledProgramInventory.ParseInstallDate("not-a-date") is null, "An invalid install date must parse to null, not a guess.");
+    var report = new EvidenceReport { Incident = new("i", crash, IncidentKind.BugCheck, "Bugcheck", "test") };
+    report.InstalledPrograms.AddRange(programs);
+    var html = ReportWriter.BuildHtml(report);
+    Assert(html.Contains("Installed software", StringComparison.Ordinal), "Installed software section missing from the HTML report.");
+    Assert(!html.Contains("<script>Evil RGB</script>", StringComparison.Ordinal) && html.Contains("&lt;script&gt;Evil RGB&lt;/script&gt;", StringComparison.Ordinal), "Program names were not HTML encoded.");
+    var text = ReportWriter.BuildPlainText(report);
+    Assert(text.Contains("INSTALLED SOFTWARE", StringComparison.Ordinal), "Installed software section missing from the text report.");
+    Assert(text.Contains("installed 2026-07-12", StringComparison.Ordinal), "The recent install date was not rendered in the text report.");
+    return Task.CompletedTask;
+}
+
+static Task WingetMetadataParsing()
+{
+    var matched = InstalledProgramWebEnricher.ParseWingetShow("Google Chrome", "Google Chrome", """
+    Found Google Chrome [Google.Chrome]
+    Version: 150.0.7871.187
+    Publisher: Google LLC
+    Publisher Url: https://www.google.com/
+    Description: Chrome is the official web browser from Google, built to be fast, secure, and customizable.
+    Homepage: https://www.google.com/chrome/
+    Installer:
+      Installer Type: wix
+      Release Date: 2026-07-23
+    """.ReplaceLineEndings("\n"));
+    Assert(matched.MatchedId == "Google.Chrome", $"Package id parsed as '{matched.MatchedId}'.");
+    Assert(matched.LatestVersion == "150.0.7871.187", $"Version parsed as '{matched.LatestVersion}'.");
+    Assert(matched.Publisher == "Google LLC" && matched.Homepage == "https://www.google.com/chrome/", "Publisher or homepage was not parsed.");
+    Assert(matched.Description!.StartsWith("Chrome is the official", StringComparison.Ordinal), "Description was not parsed.");
+
+    var ambiguous = InstalledProgramWebEnricher.ParseWingetShow("Chrome", "Chrome", "Multiple packages found matching input criteria. Please refine the input.\nName  Id  Source\n----\nGoogle Chrome  Google.Chrome  winget");
+    Assert(ambiguous.MatchedId is null && ambiguous.Note!.Contains("Multiple", StringComparison.Ordinal), "An ambiguous winget result must not be treated as a match.");
+    var missing = InstalledProgramWebEnricher.ParseWingetShow("X", "X", "No package found matching input criteria.");
+    Assert(missing.MatchedId is null && missing.Note!.Contains("No winget package", StringComparison.Ordinal), "A no-match winget result must record its note.");
+
+    Assert(InstalledProgramWebEnricher.NormalizeQuery("Malwarebytes version 5.6.2.268") == "Malwarebytes", "Version suffix was not stripped from the query.");
+    Assert(InstalledProgramWebEnricher.NormalizeQuery("Microsoft Visual Studio Code (User)") == "Microsoft Visual Studio Code", "Architecture/user suffix was not stripped.");
+    Assert(InstalledProgramWebEnricher.NormalizeQuery("Brave 150.1.92.144") == "Brave", "Trailing version number was not stripped.");
+    Assert(InstalledProgramWebEnricher.NormalizeQuery("7-Zip") == "7-Zip", "A plain name must pass through unchanged.");
+
+    var copilot = InstalledProgramWebEnricher.AnnotatePublisherMismatch(new("Copilot", "Copilot", "GitHub Copilot CLI", "GitHub.Copilot", "1.0.75", "GitHub", null, null, "winget"), "Microsoft Corporation");
+    Assert(copilot.Note!.Contains("differs", StringComparison.Ordinal), "A publisher mismatch must be annotated as a caution.");
+    var chrome = InstalledProgramWebEnricher.AnnotatePublisherMismatch(new("Google Chrome", "Google Chrome", "Google Chrome", "Google.Chrome", "150.0", "Google LLC", null, null, "winget"), "Google LLC");
+    Assert(chrome.Note is null, "Matching publishers must not be flagged.");
+    Assert(InstalledProgramWebEnricher.SharesPublisherToken("Malwarebytes", "Malwarebytes Inc"), "Corporate-suffix differences must not count as a mismatch.");
+
+    var report = new EvidenceReport { Incident = new("w", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test") };
+    report.InstalledProgramWebInfo.Add(new("Prog<script>", "Prog", "Prog", "Vendor.Prog", "2.0", "Vendor", "https://example.com", "Desc", "winget community source (online lookup by name)"));
+    var html = ReportWriter.BuildHtml(report);
+    Assert(html.Contains("Online package metadata", StringComparison.Ordinal), "Web metadata section missing from the HTML report.");
+    Assert(!html.Contains("Prog<script>", StringComparison.Ordinal), "Web metadata program names were not HTML encoded.");
+    return Task.CompletedTask;
+}
+
+static Task ApplicationFailureDetail()
+{
+    var time = DateTimeOffset.Parse("2026-08-04T19:28:25+01:00");
+    var incident = new Incident("app", time, IncidentKind.ApplicationCrash, "Application crash", "test");
+    // Application Error 1000 publishes an ordered unnamed data array.
+    var record = new EvidenceEvent(time, "Application", "Application Error", 1000, "2",
+        "Faulting application name: ProfessorSnowsVideoDownloader.exe, version: 1.0.0.0, time stamp: 0x6a3b0000\nFaulting module name: KERNELBASE.dll, version: 10.0.26100.8972\nException code: 0xe0000008",
+        Data: new Dictionary<string, string>
+        {
+            ["Data0"] = "ProfessorSnowsVideoDownloader.exe", ["Data1"] = "1.0.0.0", ["Data2"] = "0x6a3b0000",
+            ["Data3"] = "KERNELBASE.dll", ["Data4"] = "10.0.26100.8972", ["Data6"] = "0xe0000008",
+            ["Data7"] = "0x00000000000c187a", ["Data8"] = "0x19a0",
+            ["Data10"] = @"F:\App\ProfessorSnowsVideoDownloader.exe", ["Data12"] = "35b2341b-6fe0-4650-b0dd-da19b9fbfce1"
+        });
+    var details = ApplicationFailureAnalyzer.Extract(incident, [record]);
+    Assert(details?.Application == "ProfessorSnowsVideoDownloader.exe" && details.FaultingModule == "KERNELBASE.dll", "Application and faulting module were not extracted.");
+    Assert(details!.ExceptionCode == "0xe0000008" && details.ReportId!.StartsWith("35b2341b", StringComparison.Ordinal), "Exception code or report id was not extracted.");
+    Assert(details.ExceptionMeaning!.Contains("customer bit", StringComparison.OrdinalIgnoreCase) && details.ExceptionMeaning.Contains("KERNELBASE", StringComparison.Ordinal), "0xE0000008 must be explained as application-defined, exonerating KERNELBASE.");
+    Assert(ApplicationFailureAnalyzer.DescribeExceptionCode("0xe0434352")!.Contains(".NET", StringComparison.Ordinal), ".NET CLR exception code was not recognised.");
+    Assert(ApplicationFailureAnalyzer.DescribeExceptionCode("0xc0000005")!.Contains("ACCESS_VIOLATION", StringComparison.Ordinal), "Access violation was not recognised.");
+    Assert(ApplicationFailureAnalyzer.Extract(incident with { Kind = IncidentKind.BugCheck }, [record]) is null, "Kernel incidents must not produce application-failure details.");
+
+    var report = new EvidenceReport { Incident = incident, ApplicationFailure = details };
+    var html = ReportWriter.BuildHtml(report);
+    Assert(html.Contains("KERNELBASE.dll", StringComparison.Ordinal) && html.Contains("Exception meaning", StringComparison.Ordinal), "The HTML report must show the faulting module and exception meaning.");
+    Assert(ReportWriter.BuildPlainText(report).Contains("Faulting module: KERNELBASE.dll", StringComparison.Ordinal), "The text report must show the faulting module.");
+
+    // The application failure's own timestamp is the failure time; no boot estimate.
+    var timing = CrashTimestampAnalyzer.Build(incident, [record], null);
+    Assert(timing.SelectedCrashTime == time && timing.Confidence == CrashTimeConfidence.WindowsReported, "An application failure must use its own record timestamp.");
+    Assert(timing.EstimatedRangeStart is null && timing.EstimatedRangeEnd is null, "An application failure must not produce a boot-boundary estimate.");
+    return Task.CompletedTask;
+}
+
+static Task CorruptionSignals()
+{
+    Assert(FailureBucketKnowledge.Describe("ZEROED_STACK_AV")!.Contains("never zeroed", StringComparison.Ordinal), "ZEROED_STACK_AV was not explained.");
+    Assert(FailureBucketKnowledge.IndicatesDestroyedEvidence("ZEROED_STACK_AV"), "ZEROED_STACK_AV must count as destroyed attribution evidence.");
+    Assert(!FailureBucketKnowledge.IndicatesDestroyedEvidence("0x9F_3_IMAGE_storport.sys"), "An ordinary bucket must not be treated as destroyed evidence.");
+    Assert(FailureBucketKnowledge.IsPlaceholderModule("Unknown_Module") && !FailureBucketKnowledge.IsPlaceholderModule("nvlddmkm.sys"), "Placeholder module detection is wrong.");
+
+    var crash = DateTimeOffset.Parse("2026-08-04T01:31:51+01:00");
+    EvidenceEvent Fault(string process, int minutesBefore) => new(crash.AddMinutes(-minutesBefore), "Application", "Application Error", 1000, "2",
+        $"Faulting application name: {process}, exception code 0xc0000005", Data: new Dictionary<string, string> { ["AppName"] = process, ["ExceptionCode"] = "0xc0000005" });
+
+    var single = CrossLayerCorruptionAnalyzer.Analyze([Fault("MsMpEng.exe", 8)], crash, "0xC0000005");
+    Assert(single.Count == 0, "One faulting process is ordinary and must not raise a corruption observation.");
+
+    var multiple = CrossLayerCorruptionAnalyzer.Analyze([Fault("MsMpEng.exe", 8), Fault("SearchIndexer.exe", 6), Fault("MsMpEng.exe", 5)], crash, "0xC0000005");
+    Assert(multiple.Count == 1 && multiple[0].Severity == "Warning", "Two distinct faulting processes must raise one warning.");
+    Assert(multiple[0].Detail.Contains("MsMpEng.exe (×2)", StringComparison.Ordinal) && multiple[0].Detail.Contains("SearchIndexer.exe", StringComparison.Ordinal), "The observation must list the processes and counts.");
+    Assert(multiple[0].Detail.Contains("not proof", StringComparison.OrdinalIgnoreCase) && multiple[0].Detail.Contains("shared runtime", StringComparison.OrdinalIgnoreCase), "The observation must state alternatives rather than assert hardware failure.");
+
+    var old = CrossLayerCorruptionAnalyzer.Analyze([Fault("A.exe", 200), Fault("B.exe", 190)], crash, "0xC0000005");
+    Assert(old.Count == 0, "Faults outside the correlation window must be ignored.");
+    var nonAv = new EvidenceEvent(crash.AddMinutes(-3), "Application", "Application Error", 1000, "2", "exception code 0xc0000409", Data: new Dictionary<string, string> { ["AppName"] = "C.exe" });
+    Assert(CrossLayerCorruptionAnalyzer.Analyze([Fault("A.exe", 4), nonAv], crash, null).Count == 0, "Non-access-violation faults must not count toward the pattern.");
+    return Task.CompletedTask;
+}
+
+static Task ContradictedShutdownTime()
+{
+    // Real pattern (2026-08-04): boot 01:07:04, session runs to ~01:31, crash, boot
+    // 01:32:31 — but Event 6008 reported the shutdown as 01:07:31, 27s after boot.
+    var reported = DateTimeOffset.Parse("2026-08-04T01:07:31+01:00");
+    var nextBoot = DateTimeOffset.Parse("2026-08-04T01:32:31+01:00");
+    var events = new List<EvidenceEvent>
+    {
+        new(DateTimeOffset.Parse("2026-08-04T01:07:04+01:00"), "System", "Microsoft-Windows-Kernel-General", 12, "4", "boot"),
+        new(DateTimeOffset.Parse("2026-08-04T01:20:00+01:00"), "System", "Service Control Manager", 7036, "4", "still alive"),
+        new(DateTimeOffset.Parse("2026-08-04T01:31:40+01:00"), "System", "Microsoft-Windows-Ntfs", 98, "4", "final activity"),
+        new(nextBoot, "System", "Microsoft-Windows-Kernel-General", 12, "4", "boot")
+    };
+    // Each startup writes two markers (Kernel-General 12, then EventLog 6005): the
+    // reported shutdown time falls between the previous session's pair, so the naive
+    // "first boot after the crash" resolves to that session's own second marker.
+    var bootMarkers = new List<DateTimeOffset>
+    {
+        DateTimeOffset.Parse("2026-08-04T01:07:04+01:00"), DateTimeOffset.Parse("2026-08-04T01:07:31.4+01:00"),
+        nextBoot, DateTimeOffset.Parse("2026-08-04T01:32:58+01:00")
+    };
+    var boundary = IncidentDetector.RebootBoundary(bootMarkers, DateTimeOffset.Parse("2026-08-04T01:32:58+01:00"));
+    Assert(boundary == nextBoot, $"The reboot boundary must be the first marker of the startup that recorded the crash, got {boundary:O}.");
+    Assert(IncidentDetector.RebootBoundary(bootMarkers, DateTimeOffset.Parse("2026-08-04T01:07:31.5+01:00")) == DateTimeOffset.Parse("2026-08-04T01:07:04+01:00"), "A record written during the earlier startup must resolve to that startup's first marker.");
+
+    var incident = new Incident("c", reported, IncidentKind.BugCheck, "Bugcheck", "test", "0x1E", TimestampBasis: "EventLog 6008 reported previous unexpected-shutdown time", TimeConfidence: IncidentTimeConfidence.Event6008ReportedShutdown);
+    var corrected = IncidentDetector.CorrectContradictedShutdownTime(incident, nextBoot, events);
+    Assert(corrected.Timestamp == DateTimeOffset.Parse("2026-08-04T01:31:40+01:00"), $"Incident should re-anchor to the final sign of life, got {corrected.Timestamp:O}.");
+    Assert(corrected.TimestampBasis.Contains("still running", StringComparison.Ordinal), "The correction must explain why the reported time was rejected.");
+
+    var evidence = CrashTimestampAnalyzer.Build(incident with { RebootTime = nextBoot, BootTime = DateTimeOffset.Parse("2026-08-04T01:07:04+01:00") },
+        events.Append(new(reported, "System", "EventLog", 6008, "4", "unexpected shutdown", Data: new Dictionary<string, string> { ["PreviousShutdownTime"] = reported.ToString("O") })).ToList(), null);
+    Assert(evidence.Confidence == CrashTimeConfidence.EstimatedRange, $"A contradicted 6008 value must not be selected as the crash time (got {evidence.Confidence}).");
+    Assert(evidence.Explanation.Contains("still running", StringComparison.Ordinal), "The crash-time explanation must state why the reported value was rejected.");
+
+    // An uncontradicted report must still be trusted.
+    var quiet = new List<EvidenceEvent> { new(DateTimeOffset.Parse("2026-08-04T01:00:00+01:00"), "System", "Microsoft-Windows-Ntfs", 98, "4", "before") };
+    Assert(IncidentDetector.CorrectContradictedShutdownTime(incident, nextBoot, quiet).Timestamp == reported, "A shutdown time with no later activity must be kept.");
+    return Task.CompletedTask;
+}
+
+static Task DeclinedElevationIsLoud()
+{
+    var report = new EvidenceReport { Incident = new("e", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test", "0x1E") };
+    report.Observations.Add(new("Attention", "No dump evidence: administrator access was not granted", "The administrator prompt was declined, dismissed, or timed out, so protected crash dumps could not be copied. Collect this incident again and approve the prompt."));
+    var html = ReportWriter.BuildHtml(report);
+    var headlineIndex = html.IndexOf("A. Headline", StringComparison.Ordinal);
+    var blockerIndex = html.IndexOf("No dump evidence", StringComparison.Ordinal);
+    Assert(blockerIndex >= 0 && blockerIndex < headlineIndex, "The blocked-evidence warning must appear before the headline section.");
+    Assert(html.Contains("card failure", StringComparison.Ordinal), "The blocked-evidence warning must use the failure styling.");
+    var text = ReportWriter.BuildPlainText(report);
+    Assert(text.IndexOf("NO DUMP EVIDENCE", StringComparison.Ordinal) is > 0 and < 200, "The text report must lead with the blocked-evidence warning.");
+    var clean = new EvidenceReport { Incident = report.Incident };
+    Assert(!ReportWriter.BuildHtml(clean).Contains("card failure", StringComparison.Ordinal), "Reports without a blocking failure must not show the warning.");
+    return Task.CompletedTask;
+}
+
+static Task MemoryManagementAndBurstCollapse()
+{
+    var definition = BugCheckKnowledge.Find(0x1A);
+    Assert(definition?.Name == "MEMORY_MANAGEMENT", "0x1A is missing from the knowledge base.");
+    var decoded = BugCheckKnowledge.DecodeParameters(0x1A, ["0x3453", "0xffff808ee7ded080", "0x4ff6a2", "0x3"]);
+    Assert(decoded[0].SymbolicValue?.Contains("exiting process", StringComparison.OrdinalIgnoreCase) == true, "Subtype 0x3453 was not decoded.");
+    Assert(decoded[1].SymbolicValue is null && decoded[1].Meaning.Contains("preserve", StringComparison.OrdinalIgnoreCase), "Subtype-specific parameters must not be guessed.");
+
+    var start = DateTimeOffset.Parse("2026-08-03T19:31:36Z");
+    var entries = new List<CorrelatedTimelineEntry>
+    {
+        new(start.AddSeconds(-60), TimeSpan.Zero, TimelinePhase.Crash, "Crash-time correlation", "Crash time anchor", "anchor", EvidenceOrigin.DirectObservation, "Crash T±0")
+    };
+    for (var index = 0; index < 40; index++)
+        entries.Add(new(start.AddSeconds(index * 0.3), TimeSpan.FromSeconds(index), TimelinePhase.DumpCreation, "Application:Windows Error Reporting/1001", "Windows Error Reporting event 1001", "Windows Error Reporting created or classified a failure report.", EvidenceOrigin.DirectObservation, $"Boot T+{index}s"));
+    entries.Add(new(start.AddSeconds(90), TimeSpan.FromSeconds(90), TimelinePhase.Reboot, "System:EventLog/6005", "EventLog event 6005", "Boot boundary.", EvidenceOrigin.DirectObservation, "Boot T±0"));
+    var collapsed = ReportWriter.CollapseBursts(entries);
+    Assert(collapsed.Count == 3, $"Expected anchor + one collapsed burst + boot boundary, got {collapsed.Count} rows.");
+    Assert(collapsed[1].Title.Contains("(×40)", StringComparison.Ordinal) && collapsed[1].Explanation.Contains("remain in report.json", StringComparison.Ordinal), "The collapsed row must state the count and where originals are preserved.");
+    Assert(ReportWriter.CollapseBursts(entries.Take(3).ToList()).Count == 3, "Runs shorter than three entries must never collapse.");
+    return Task.CompletedTask;
+}
+
+static async Task MonitoringPipeline()
+{
+    var sensors = HwInfoGadgetReader.BuildSensorMap([("CPU Package", "89.5"), ("CPU Package", "90"), ("PUMP1", "2321"), ("Vcore", "not-a-number"), (" ", "5")]);
+    Assert(sensors!.Count == 3 && sensors["CPU Package"] == 89.5 && sensors["CPU Package #2"] == 90, "HWiNFO sensor labels were not deduplicated or parsed invariantly.");
+    var hot = new MonitorSample(DateTimeOffset.Parse("2026-07-29T12:00:00+01:00"), 6, 90, 5100, 40, new Dictionary<string, double> { ["\\_TZ.TZ01"] = 55 }, new Dictionary<string, double> { ["CPU Package"] = 101, ["CPU Package Power"] = 55 }, "test");
+    Assert(HwInfoGadgetReader.SelectCpuTemperature(hot) == 101, "The HWiNFO package temperature must take precedence over ACPI zones and ignore the power sensor.");
+    Assert(HwInfoGadgetReader.SelectCpuTemperature(hot with { HwInfoSensors = null }) == 55, "The hottest ACPI zone must be the fallback temperature source.");
+
+    var folder = Path.Combine(Path.GetTempPath(), "CecMonitorTests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+    try
+    {
+        var inside = hot with { Timestamp = DateTimeOffset.Parse("2026-07-29T12:00:00+01:00") };
+        var outside = hot with { Timestamp = DateTimeOffset.Parse("2026-07-29T09:00:00+01:00") };
+        await MonitorLog.AppendSampleAsync(folder, outside, CancellationToken.None);
+        await MonitorLog.AppendSampleAsync(folder, inside, CancellationToken.None);
+        await MonitorLog.AppendSampleAsync(folder, inside with { Timestamp = inside.Timestamp.AddSeconds(2), CpuUtilityPercent = 8, CommitPercent = 95 }, CancellationToken.None);
+        var file = Directory.GetFiles(folder, "monitor-*.jsonl").Single();
+        // A pre-memory-tracking line (no commit/pool fields) must still load.
+        await File.AppendAllTextAsync(file, "{\"timestamp\":\"2026-07-29T12:00:04+01:00\",\"cpuUtilityPercent\":5,\"memoryLoadPercent\":40,\"sensorSource\":\"old-format\"}\n");
+        await File.AppendAllTextAsync(file, "{\"timestamp\":\"2026-07-29T12:00:0"); // torn write at bugcheck time
+        var loaded = await MonitorLog.LoadSamplesAsync(folder, inside.Timestamp.AddMinutes(-10), inside.Timestamp.AddMinutes(10), CancellationToken.None);
+        Assert(loaded.Count == 3, $"Expected 3 in-window samples (including the old-format line) despite the torn final line, got {loaded.Count}.");
+        Assert(loaded.Single(sample => sample.SensorSource == "old-format").CommitPercent is null, "Old-format lines must load with absent commit data, not invented values.");
+
+        await MonitorLog.AppendEventAsync(folder, new(inside.Timestamp.AddSeconds(1), "Microsoft-Windows-WHEA-Logger", 19, "Corrected machine check, APIC 33."), CancellationToken.None);
+        var raw = Path.Combine(folder, "RawOut"); Directory.CreateDirectory(raw);
+        var export = await MonitorWindowAnalyzer.ExportWindowAsync(folder, raw, inside.Timestamp.AddMinutes(-10), inside.Timestamp.AddMinutes(10), CancellationToken.None);
+        Assert(export.Item.State == EvidenceState.Success && File.Exists(Path.Combine(raw, "monitoring-window.jsonl")), "The monitoring window was not exported as raw evidence.");
+        Assert(export.Observations.Any(item => item.Severity == "Warning" && item.Title == "High temperature at low load"), "101 °C at ~7% utility must produce the cooling-fault warning.");
+        Assert(export.Observations.Any(item => item.Title == "Commit charge neared exhaustion"), "95% commit charge must produce the commit warning.");
+        Assert(export.Observations.Any(item => item.Detail.Contains("Corrected machine check", StringComparison.Ordinal)), "The live-captured WHEA event was not surfaced as an observation.");
+
+        var empty = await MonitorWindowAnalyzer.ExportWindowAsync(Path.Combine(folder, "nowhere"), raw, inside.Timestamp, inside.Timestamp.AddMinutes(1), CancellationToken.None);
+        Assert(empty.Item.State == EvidenceState.Skipped, "Absent monitoring history must be reported as skipped, never fabricated.");
+    }
+    finally { Directory.Delete(folder, true); }
+}
 
 static Task TimestampCorrelation()
 {
@@ -156,7 +417,8 @@ static Task CommandPlanning()
     Assert(first.Any(item => item.Command.StartsWith("!errrec 0xFFFF800012340000", StringComparison.OrdinalIgnoreCase)), "Canonical !errrec address was not planned.");
     var guarded = DebuggerCommandPlanner.Plan(DumpType.KernelMemory, 0x124, ["0", "1234", "0", "0"]);
     Assert(guarded.All(item => !item.Command.StartsWith("!errrec ", StringComparison.OrdinalIgnoreCase)), "Non-canonical address entered a debugger command.");
-    Assert(first[0].Command == ".symfix+" && first[1].Command == ".reload /f", "Symbol setup is not the first deterministic debugger phase.");
+    Assert(first[0].Command == ".symfix+" && first[1].Command == ".bugcheck" && first[2].Command == ".reload /f nt" && first[3].Command == "!analyze -v", "Essential bugcheck capture is not ahead of symbol-dependent analysis.");
+    Assert(first.All(item => !item.Command.Equals(".reload /f", StringComparison.OrdinalIgnoreCase)), "The expensive all-module forced reload is still planned.");
     return Task.CompletedTask;
 }
 
@@ -387,6 +649,87 @@ static Task DumpIncidentAssociation()
     var text = ReportWriter.BuildPlainText(report); var allDumps = text.IndexOf("ALL COPIED DUMP ANALYSES", StringComparison.Ordinal);
     Assert(allDumps > 0 && !text[..allDumps].Contains("svchost.exe", StringComparison.OrdinalIgnoreCase), "Rejected process context leaked into the text report's primary dump.");
     Assert(DumpIncidentMatcher.AssignPrimary(incident, [wrong]) is null, "A collection containing only a wrong-code dump still produced a primary.");
+    return Task.CompletedTask;
+}
+
+static Task TimedOutDumpAssociation()
+{
+    var crash = DateTimeOffset.Parse("2026-07-29T11:41:27+01:00");
+    var reboot = DateTimeOffset.Parse("2026-07-29T11:51:18+01:00");
+    var incident = new Incident("timeout", crash, IncidentKind.BugCheck, "Bugcheck 0x1E", "test", "0x1E", RebootTime: reboot);
+    var timedOut = new DumpAnalysisResult
+    {
+        Dump = new() { CopiedPath = "072926-23468-01.dmp", DumpHeaderTime = DateTimeOffset.Parse("2026-07-29T11:50:26+01:00"), ModificationTime = reboot.AddSeconds(37), Completion = DebuggerCompletion.TimedOut },
+        Analyze = new() { BugCheckCode = "0x1E", BugCheckCodeFromSelectedIncidentFallback = true },
+        Quality = new(AnalysisQualityLevel.Poor, 25, "Timed out before !analyze.", [], ["Timeout"])
+    };
+    var primary = DumpIncidentMatcher.AssignPrimary(incident, [timedOut]);
+    Assert(ReferenceEquals(primary, timedOut), "The only reboot-consistent timed-out dump was rejected.");
+    Assert(timedOut.Association.Status == DumpAssociationStatus.TimestampOnlyMatch && timedOut.Association.Explanation.Contains("provisionally", StringComparison.OrdinalIgnoreCase), "Incomplete association was not labelled timestamp-only/provisional.");
+
+    var wrong = new DumpAnalysisResult
+    {
+        Dump = new() { CopiedPath = "wrong.dmp", DumpHeaderTime = timedOut.Dump.DumpHeaderTime, ModificationTime = timedOut.Dump.ModificationTime, Completion = DebuggerCompletion.TimedOut },
+        Analyze = new() { BugCheckCode = "0x50" },
+        Quality = timedOut.Quality
+    };
+    Assert(DumpIncidentMatcher.AssignPrimary(incident, [wrong]) is null && wrong.Association.Status == DumpAssociationStatus.RejectedBugCheckMismatch, "A debugger-observed wrong code escaped the mismatch veto.");
+    return Task.CompletedTask;
+}
+
+static Task EarlyBugcheckCapture()
+{
+    const string output = """
+        === CEC COMMAND: .bugcheck ===
+        Bugcheck code 0000001E
+        Arguments ffffffff`c0000005 fffff805`a49d40b0 00000000`00000000 ffffffff`ffffffff
+        """;
+    var dump = new DumpEvidence { Completion = DebuggerCompletion.TimedOut };
+    var parsed = new DebuggerOutputParser().Parse(output, "Command timed out.", dump);
+    Assert(parsed.Analyze.BugCheckCode == "0x1E", $"Raw .bugcheck code parsed as {parsed.Analyze.BugCheckCode ?? "null"}.");
+    Assert(parsed.Analyze.BugCheckParameters.Count == 4 && parsed.Analyze.BugCheckParameters[0].Equals("0xFFFFFFFFC0000005", StringComparison.OrdinalIgnoreCase), "Raw .bugcheck arguments were not retained.");
+    Assert(!parsed.Analyze.BugCheckCodeFromSelectedIncidentFallback, "Debugger-observed code was marked as an event fallback.");
+    return Task.CompletedTask;
+}
+
+static Task ApplicationReportWithoutDump()
+{
+    var report = new EvidenceReport
+    {
+        Incident = new("app", DateTimeOffset.Now, IncidentKind.ApplicationCrash, "Application crash — sample.exe", "WER application failure"),
+        OverallAssessment = new() { HeadlineComponent = "Undetermined", Confidence = ConfidenceLevel.InsufficientEvidence, Explanation = "Windows recorded an application failure. Kernel dump analysis is not applicable." }
+    };
+    var html = ReportWriter.BuildHtml(report);
+    Assert(html.Contains("A kernel crash dump is not expected or required", StringComparison.Ordinal), "Application report did not explain why a kernel dump is unnecessary.");
+    Assert(!html.Contains("No copied dump was safely associated with this selected incident", StringComparison.Ordinal), "Application report still presents missing kernel-dump association as a failure.");
+    Assert(html.Contains("Incident type", StringComparison.Ordinal) && !html.Contains(">Bugcheck</small><strong>Not recorded", StringComparison.Ordinal), "Application report still renders a fake bugcheck metric.");
+    var text = ReportWriter.BuildPlainText(report);
+    Assert(text.Contains("APPLICATION CRASH EVIDENCE", StringComparison.Ordinal) && text.Contains("not expected or required", StringComparison.OrdinalIgnoreCase), "Plain-text application report still demands a dump.");
+    return Task.CompletedTask;
+}
+
+static Task CrashMetricsHandling()
+{
+    var now = DateTimeOffset.Parse("2026-07-29T12:00:00+01:00");
+    var live = new[]
+    {
+        new Incident("bug-1", now.AddHours(-1), IncidentKind.BugCheck, "0x50", "test", "0x50"),
+        new Incident("app-1", now.AddDays(-1), IncidentKind.ApplicationCrash, "Application crash", "test"),
+        new Incident("power-1", now.AddHours(-2), IncidentKind.PowerLossOrFreeze, "Power loss", "test")
+    };
+    var retained = new[]
+    {
+        live[0] with { RecordedAt = now },
+        live[0] with { RecordedAt = now.AddMinutes(-5) },
+        new Incident("bug-2", now.AddDays(-10), IncidentKind.BugCheck, "0x1AA", "test", "0x1AA")
+    };
+    var snapshot = CrashMetricsCalculator.Build(live, retained, now.AddDays(-2), now, new HashSet<string>(StringComparer.Ordinal) { "bug-1" }, live);
+    Assert(snapshot.IncidentsInRange == 3 && snapshot.BugChecksInRange == 1, "In-range incident totals are wrong.");
+    Assert(snapshot.NewIncidentsInRange == 1 && snapshot.RetainedIncidentCount == 2, "Duplicate retained reports for one incident were not collapsed.");
+    Assert(snapshot.Trend.Sum(point => point.Value) == 3, "Trend buckets must count every visible incident exactly once.");
+    Assert(snapshot.DailyIncidentMix.Count == 14 && snapshot.DailyIncidentMix.Sum(day => day.Total) == 3, "Daily stacked series does not cover/count the 14-day history.");
+    Assert(snapshot.IncidentTypes.Single(point => point.Label == "Bugchecks").Value == 1 && snapshot.IncidentTypes.Single(point => point.Label == "Applications").Value == 1, "Incident-type split is wrong.");
+    Assert(snapshot.TopBugChecks.Count == 2 && snapshot.TopBugChecks.All(item => item.Value == 1), "Repeated-code metric grouped distinct bugchecks incorrectly.");
     return Task.CompletedTask;
 }
 

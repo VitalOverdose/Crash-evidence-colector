@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Sample RGB Lighting Studio",
+    "version": "4.2.1",
+    "publisher": "Sample Peripherals Ltd",
+    "installDate": "2026-07-10T00:00:00+00:00",
+    "installLocation": "C:\\Program Files\\Sample RGB Lighting Studio",
+    "source": "Test-data fixture"
+  },
+  {
+    "name": "Sample VPN Client",
+    "version": "2.8.0",
+    "publisher": "Sample Networks Inc",
+    "installDate": "2026-07-12T00:00:00+00:00",
+    "installLocation": "C:\\Program Files\\Sample VPN Client",
+    "source": "Test-data fixture"
+  },
+  {
+    "name": "Sample Antivirus Platform",
+    "version": "24.5.0",
+    "publisher": "Sample Security GmbH",
+    "installDate": "2026-05-20T00:00:00+00:00",
+    "installLocation": "C:\\Program Files\\Sample Antivirus Platform",
+    "source": "Test-data fixture"
+  },
+  {
+    "name": "Sample Office Suite",
+    "version": "16.0.100",
+    "publisher": "Sample Software Corporation",
+    "installDate": "2025-11-02T00:00:00+00:00",
+    "installLocation": "C:\\Program Files\\Sample Office Suite",
+    "source": "Test-data fixture"
+  },
+  {
+    "name": "Sample Game Launcher",
+    "version": null,
+    "publisher": null,
+    "installDate": null,
+    "installLocation": null,
+    "source": "Test-data fixture"
+  }
+]

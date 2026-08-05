@@ -1,0 +1,26 @@
+[
+  {
+    "programName": "Sample RGB Lighting Studio",
+    "queryUsed": "Sample RGB Lighting Studio",
+    "matchedName": "Sample RGB Lighting Studio",
+    "matchedId": "SamplePeripherals.RgbLightingStudio",
+    "latestVersion": "4.3.0",
+    "publisher": "Sample Peripherals Ltd",
+    "homepage": "https://example.com/rgb-lighting-studio",
+    "description": "Lighting control suite for Sample Peripherals devices.",
+    "source": "winget community source (online lookup by name)",
+    "note": null
+  },
+  {
+    "programName": "Sample VPN Client",
+    "queryUsed": "Sample VPN Client",
+    "matchedName": null,
+    "matchedId": null,
+    "latestVersion": null,
+    "publisher": null,
+    "homepage": null,
+    "description": null,
+    "source": "winget community source (online lookup by name)",
+    "note": "No winget package matched this name."
+  }
+]

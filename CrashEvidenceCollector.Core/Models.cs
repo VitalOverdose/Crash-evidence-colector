@@ -40,6 +40,27 @@ public sealed record EvidenceItem(
     long? Bytes = null);
 
 public sealed record Observation(string Severity, string Title, string Detail);
+
+public sealed record InstalledProgram(
+    string Name,
+    string? Version,
+    string? Publisher,
+    DateTimeOffset? InstallDate,
+    string? InstallLocation,
+    string Source);
+
+public sealed record ProgramWebInfo(
+    string ProgramName,
+    string QueryUsed,
+    string? MatchedName,
+    string? MatchedId,
+    string? LatestVersion,
+    string? Publisher,
+    string? Homepage,
+    string? Description,
+    string Source,
+    string? Note = null);
+
 public sealed record CodeInterpretation(string Category, string RawValue, string Name, string Explanation, string? ConvertedValue = null);
 
 public sealed class MachineSnapshot
@@ -81,6 +102,9 @@ public sealed class EvidenceReport
     public List<CorrelatedTimelineEntry> CorrelatedTimeline { get; set; } = [];
     public List<ComparisonFinding> ComparisonFindings { get; set; } = [];
     public List<StorageDeviceHealth> StorageDevices { get; set; } = [];
+    public List<InstalledProgram> InstalledPrograms { get; set; } = [];
+    public List<ProgramWebInfo> InstalledProgramWebInfo { get; set; } = [];
+    public ApplicationFailureDetails? ApplicationFailure { get; set; }
     public CrashTimestampEvidence CrashTimestamp { get; set; } = new();
     public IncidentConclusion Conclusion { get; set; } = new("Undetermined failure", "Unavailable", "Unavailable", "Undetermined", ConfidenceLevel.InsufficientEvidence);
 }
@@ -92,6 +116,9 @@ public sealed class CollectionOptions
     public bool IncludeFullMemoryDump { get; set; }
     public bool RedactAccountName { get; set; } = true;
     public bool AnalyzeCrashDumps { get; set; } = true;
+    public bool LookUpInstalledProgramsOnline { get; set; } = true;
+    public bool StartMonitoringOnLaunch { get; set; }
+    public bool AlwaysRunElevated { get; set; }
     public int DebuggerTimeoutSeconds { get; set; } = 180;
     public string OutputRoot { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Crash Evidence Collector");
     public string? TestDataDirectory { get; set; }

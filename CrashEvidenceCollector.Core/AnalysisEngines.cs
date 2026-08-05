@@ -13,7 +13,20 @@ public static class AnalysisQualityScorer
         score += dumpPoints; strengths.Add($"{analysis.Dump.DumpType} supplied {dumpPoints}/25 dump-completeness points.");
         score += analysis.Symbols.Quality switch { SymbolQuality.Good => 20, SymbolQuality.Partial => 12, SymbolQuality.Poor => 4, _ => 0 };
         if (analysis.Symbols.Quality == SymbolQuality.Good) strengths.Add("Core symbols and most stack frames resolved."); else limitations.Add(analysis.Symbols.Explanation);
-        if (!string.IsNullOrWhiteSpace(analysis.Analyze.BugCheckCode)) { score += 15; strengths.Add("!analyze produced a structured bugcheck result."); } else limitations.Add("No structured !analyze bugcheck result was parsed.");
+        if (!string.IsNullOrWhiteSpace(analysis.Analyze.BugCheckCode) && !analysis.Analyze.BugCheckCodeFromSelectedIncidentFallback)
+        {
+            score += 10;
+            strengths.Add("The debugger exposed the dump's own bugcheck code.");
+            if (analysis.Analyze.RawSections.ContainsKey("!analyze -v"))
+            {
+                score += 5;
+                strengths.Add("!analyze produced a structured bugcheck section.");
+            }
+            else limitations.Add("The raw bugcheck code was captured, but !analyze did not complete.");
+        }
+        else if (analysis.Analyze.BugCheckCodeFromSelectedIncidentFallback)
+            limitations.Add("The bugcheck code came from the selected Windows event because CDB did not expose a dump-confirmed code.");
+        else limitations.Add("No debugger-confirmed bugcheck code was parsed.");
         if (!string.IsNullOrWhiteSpace(analysis.Analyze.ContextRecord) || !string.IsNullOrWhiteSpace(analysis.Analyze.TrapFrame)) { score += 10; strengths.Add("A context or trap record was available."); } else limitations.Add("No readable context/trap record was available.");
         var resolved = analysis.StackFrames.Count(frame => frame.Resolved); var ratio = analysis.StackFrames.Count == 0 ? 0 : resolved / (double)analysis.StackFrames.Count;
         if (ratio >= .75) { score += 15; strengths.Add("The parsed stack was mostly resolved."); } else if (ratio >= .35) { score += 8; limitations.Add("The stack was only partially resolved."); } else limitations.Add("The stack was absent or poorly unwindable.");
@@ -41,7 +54,10 @@ public static class CulpritAssessmentEngine
             candidate.SupportingEvidence.Add(new(description, weight, origin, source)); candidate.Score += weight;
         }
 
+        // "Unknown_Module"/"ANALYSIS_INCONCLUSIVE" are the debugger saying it has
+        // nothing to name; treating them as candidates invents a suspect from a blank.
         var faultModule = NormalizeModule(analysis.Analyze.ModuleName ?? analysis.Analyze.ImageName ?? analysis.StackFrames.FirstOrDefault()?.Module);
+        if (FailureBucketKnowledge.IsPlaceholderModule(faultModule)) faultModule = null;
         if (!string.IsNullOrWhiteSpace(faultModule))
         {
             var category = ModuleClassifier.Classify(faultModule, null, null); var candidate = Candidate(faultModule, ModuleClassifier.IsMicrosoft(category) ? CandidateKind.WindowsSubsystem : CandidateKind.Driver);
@@ -56,6 +72,8 @@ public static class CulpritAssessmentEngine
 
         foreach (var frame in analysis.StackFrames.Where(frame => frame.ModuleCategory is not (ModuleCategory.MicrosoftKernelCore or ModuleCategory.MicrosoftInboxDriver or ModuleCategory.UnknownUnverifiable)).Take(8))
         {
+            // A frame the debugger could not name is not a suspect.
+            if (string.IsNullOrWhiteSpace(frame.Module) || FailureBucketKnowledge.IsPlaceholderModule(frame.Module)) continue;
             var candidate = Candidate(frame.Module ?? "Unknown third-party frame", CandidateKind.Driver);
             var weight = frame.Relationship switch { StackRelationship.ExecutingAtFault => 50, StackRelationship.DirectCaller => 25, _ => 8 };
             Evidence(candidate, $"Module appears at stack frame {frame.Index} ({frame.Relationship}).", weight, EvidenceOrigin.DirectObservation, frame.RawLine);
@@ -91,7 +109,17 @@ public static class CulpritAssessmentEngine
             candidate.Explanation = $"{candidate.Entity} has {candidate.Confidence} confidence from {candidate.SupportingEvidence.Count} supporting item(s). " + (candidate.CounterEvidence.Count > 0 ? string.Join(" ", candidate.CounterEvidence) : string.Empty);
         }
         var ordered = candidates.Values.OrderByDescending(candidate => candidate.Score).ToList(); var best = ordered.FirstOrDefault();
-        if (best is null || best.Confidence == ConfidenceLevel.InsufficientEvidence) return new() { Candidates = ordered };
+        if (best is null || best.Confidence == ConfidenceLevel.InsufficientEvidence)
+        {
+            var destroyed = FailureBucketKnowledge.IndicatesDestroyedEvidence(analysis.Analyze.FailureBucketId);
+            return new()
+            {
+                Candidates = ordered,
+                Explanation = destroyed
+                    ? $"No component can be named from this dump: the debugger's failure bucket ({analysis.Analyze.FailureBucketId}) shows the evidence needed for attribution was itself destroyed. {FailureBucketKnowledge.Describe(analysis.Analyze.FailureBucketId)} This is a limitation of the evidence, not a finding that the cause is unknowable — correlation across incidents and pre-crash evidence may still identify a pattern."
+                    : "The available evidence does not identify a responsible component."
+            };
+        }
         return new() { HeadlineComponent = best.Entity, Confidence = best.Confidence, Origin = best.SupportingEvidence.Any(evidence => evidence.Origin == EvidenceOrigin.DirectObservation) ? EvidenceOrigin.AnalyzerInference : EvidenceOrigin.PossibleCorrelation, Explanation = best.Explanation, Candidates = ordered };
     }
 

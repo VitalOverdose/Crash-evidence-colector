@@ -35,11 +35,28 @@ public sealed class EvidenceCollectionEngine(EventLogReader eventReader, SystemE
             catch (Exception ex) when (ex is not OperationCanceledException) { report.Errors.Add($"{category}: {ex.Message}"); report.Evidence.Add(new(category, EvidenceState.Warning, "Log unavailable or access denied.", Error: ex.Message)); }
         }
 
+        // Background-monitoring history is real-machine state; test-data runs must not read it.
+        if (!options.IsTestDataMode)
+        {
+            progress?.Report(new(28, "Background monitoring", "Attaching monitor samples recorded around the crash window"));
+            var monitoring = await MonitorWindowAnalyzer.ExportWindowAsync(MonitorLog.DefaultDirectory, raw, from, to, cancellationToken).ConfigureAwait(false);
+            report.Evidence.Add(monitoring.Item);
+            report.Observations.AddRange(monitoring.Observations);
+        }
+        else report.Evidence.Add(new("Background monitoring", EvidenceState.Skipped, "Live monitoring history is never read in TEST-DATA MODE."));
+
         progress?.Report(new(30, "System", "Collecting hardware, Windows and configuration inventory"));
         report.Machine = await systemCollector.CollectAsync(raw, options.TestDataDirectory, report.Errors, cancellationToken).ConfigureAwait(false);
         report.Evidence.Add(new("System and hardware", report.Machine.Windows == "Unavailable" ? EvidenceState.Warning : EvidenceState.Success, "Collected OS, BIOS, board, CPU, RAM, GPU, storage, boot and virtualization information."));
         report.Evidence.AddRange(await systemCollector.CollectTextInventoriesAsync(raw, options.TestDataDirectory, report.Errors, cancellationToken).ConfigureAwait(false));
         report.StorageDevices.AddRange(await StorageHealthAnalyzer.LoadAsync(raw, cancellationToken).ConfigureAwait(false));
+        var installed = await systemCollector.CollectInstalledProgramsAsync(raw, options.TestDataDirectory, report.Errors, cancellationToken).ConfigureAwait(false);
+        report.InstalledPrograms.AddRange(installed.Programs);
+        report.Evidence.Add(installed.Evidence);
+        progress?.Report(new(48, "Program metadata", "Looking up recently installed programs in the winget source"));
+        var webInfo = await InstalledProgramWebEnricher.EnrichAsync(installed.Programs, incident.Timestamp, raw, options, cancellationToken).ConfigureAwait(false);
+        report.InstalledProgramWebInfo.AddRange(webInfo.Results);
+        report.Evidence.Add(webInfo.Evidence);
 
         progress?.Report(new(62, "WER", "Copying Reliability Monitor and WER records"));
         var wer = await fileCollector.CopyWerAsync(incident, Path.Combine(raw, "WER"), options, cancellationToken).ConfigureAwait(false); report.Evidence.Add(wer); if (wer.Error is not null) report.Errors.Add(wer.Error);
@@ -60,14 +77,29 @@ public sealed class EvidenceCollectionEngine(EventLogReader eventReader, SystemE
                 report.Evidence.Add(new("Elevated dump access", elevated.Success ? EvidenceState.Success : EvidenceState.Warning, $"The helper copied {elevated.CopiedFiles.Count} protected file(s).", elevated.CopiedFiles, elevated.Errors.Count == 0 ? null : string.Join(Environment.NewLine, elevated.Errors)));
                 report.Errors.AddRange(elevated.Errors);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException) { report.Errors.Add("Elevated helper: " + ex.Message); report.Evidence.Add(new("Elevated dump access", EvidenceState.Warning, "Administrator access was declined or unavailable; collection continued.", Error: ex.Message)); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                report.Errors.Add("Elevated helper: " + ex.Message);
+                report.Evidence.Add(new("Elevated dump access", EvidenceState.Warning, "Administrator access was declined or unavailable; collection continued.", Error: ex.Message));
+                // A declined prompt costs the entire dump analysis. Say so loudly:
+                // a silent footnote produces an empty report that looks like a tool failure.
+                var declined = ex.Message.Contains("canceled by the user", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("cancelled by the user", StringComparison.OrdinalIgnoreCase);
+                report.Observations.Add(new("Attention", "No dump evidence: administrator access was not granted",
+                    (declined ? "The administrator prompt was declined, dismissed, or timed out, so protected crash dumps could not be copied." : "The elevated helper could not run, so protected crash dumps could not be copied.")
+                    + " Windows stores dumps in a protected folder, so this report contains no debugger analysis: bugcheck details, stack, modules, and culprit assessment are all unavailable for that reason alone — not because the evidence was inconclusive."
+                    + " Collect this incident again and approve the prompt, or enable \"Always run as administrator\" in Settings."));
+            }
         }
 
         // Dump analysis runs only after copying/elevation has finished, so CDB never
         // needs administrative rights and never opens the protected source in place.
-        progress?.Report(new(79, "Dump analysis", "Hashing and analyzing copied dumps with CDB"));
-        var analyzer = new DumpAnalysisService(log);
-        report.DumpAnalyses.AddRange(await analyzer.AnalyzeDirectoryAsync(dumpDirectory, raw, incident, report.Machine, report.Events, options, progress, cancellationToken).ConfigureAwait(false));
+        var expectsKernelDump = ExpectsKernelCrashDump(incident);
+        if (expectsKernelDump)
+        {
+            progress?.Report(new(79, "Dump analysis", "Hashing and analyzing copied dumps with CDB"));
+            var analyzer = new DumpAnalysisService(log);
+            report.DumpAnalyses.AddRange(await analyzer.AnalyzeDirectoryAsync(dumpDirectory, raw, incident, report.Machine, report.Events, options, progress, cancellationToken).ConfigureAwait(false));
+        }
         DumpAnalysisResult? primary = null;
         if (report.DumpAnalyses.Count > 0)
         {
@@ -100,6 +132,15 @@ public sealed class EvidenceCollectionEngine(EventLogReader eventReader, SystemE
                 : $"Associated {Path.GetFileName(primary.Dump.CopiedPath)} by {primary.Association.Status}; analysis quality: {report.AnalysisQuality.Level} ({report.AnalysisQuality.Score}/100). {report.DumpAnalyses.Count - 1} other dump(s) were retained separately.";
             report.Evidence.Add(new("Crash-dump analysis", associationState, associationSummary, report.DumpAnalyses.SelectMany(item => new[] { item.Dump.RawOutputPath, item.Dump.RawErrorPath }.OfType<string>()).ToList(), failed == 0 ? null : $"{failed} dump analysis attempt(s) were incomplete."));
         }
+        else if (!expectsKernelDump)
+        {
+            var explanation = incident.Kind == IncidentKind.ApplicationCrash
+                ? "This is an application-level failure. A Windows kernel crash dump is not expected or required; Application and WER records are the relevant evidence."
+                : "This incident type does not by itself require a Windows kernel crash dump. Event evidence was retained without attaching an unrelated historical dump.";
+            report.OverallAssessment = new() { HeadlineComponent = "Undetermined", Confidence = ConfidenceLevel.InsufficientEvidence, Explanation = explanation };
+            report.AnalysisQuality = new(AnalysisQualityLevel.Inconclusive, 0, "Kernel dump analysis is not applicable to this selected incident type.", [], [explanation]);
+            report.Evidence.Add(new("Crash-dump analysis", EvidenceState.Skipped, explanation));
+        }
         else report.Evidence.Add(new("Crash-dump analysis", EvidenceState.Skipped, options.AnalyzeCrashDumps ? "No copied dump was available to analyze." : "Dump analysis was disabled in settings."));
 
         // Crash time and crash cause are independent conclusions. In particular,
@@ -107,9 +148,13 @@ public sealed class EvidenceCollectionEngine(EventLogReader eventReader, SystemE
         report.CrashTimestamp = CrashTimestampAnalyzer.Build(incident, report.Events, primary);
         report.Conclusion = IncidentConclusionEngine.Build(incident, primary, report.OverallAssessment);
         report.Observations.AddRange(CorrelationEngine.Analyze(incident, timeline, report.Events));
+        report.Observations.AddRange(CrossLayerCorruptionAnalyzer.Analyze(report.Events, report.CrashTimestamp.SelectedCrashTime ?? incident.Timestamp, primary?.Analyze.ExceptionCode ?? primary?.Analyze.BugCheckParameters.FirstOrDefault()));
         report.CodeInterpretations.AddRange(CodeDecoder.Interpret(incident, report.Events));
+        report.ApplicationFailure = ApplicationFailureAnalyzer.Extract(incident, report.Events);
         var recentChanges = report.Events.Count(e => (e.Provider.Contains("Servicing", StringComparison.OrdinalIgnoreCase) || e.Provider.Contains("Kernel-PnP", StringComparison.OrdinalIgnoreCase)) && e.Timestamp <= incident.Timestamp && incident.Timestamp - e.Timestamp < TimeSpan.FromDays(2));
         if (recentChanges > 0) report.Observations.Add(new("Info", "Recent system changes", $"Possible correlation: {recentChanges} update or device-change event(s) were recorded in the 48 hours before the incident. Timing alone does not establish causation."));
+        var recentInstalls = InstalledProgramInventory.RecentInstalls(report.InstalledPrograms, incident.Timestamp);
+        if (recentInstalls.Count > 0) report.Observations.Add(new("Info", "Recently installed programs", $"Possible correlation: {recentInstalls.Count} program(s) were installed in the {InstalledProgramInventory.RecentInstallWindow.TotalDays:0} days before the incident: {string.Join(", ", recentInstalls.Take(8).Select(program => program.Name))}{(recentInstalls.Count > 8 ? ", …" : string.Empty)}. Installation timing alone does not establish causation."));
         report.CorrelatedTimeline.AddRange(EventTimelineEngine.Build(incident, report.Events, report.CrashTimestamp));
 
         progress?.Report(new(88, "Reports", "Generating redacted JSON and HTML reports"));
@@ -118,6 +163,9 @@ public sealed class EvidenceCollectionEngine(EventLogReader eventReader, SystemE
         await log.WriteAsync("information", "Collection completed", new { incident.Id, paths.Zip }, cancellationToken).ConfigureAwait(false);
         return new(report, outputDirectory, paths.Json, paths.Html, paths.Text, paths.Zip);
     }
+
+    private static bool ExpectsKernelCrashDump(Incident incident)
+        => incident.Kind is IncidentKind.BugCheck or IncidentKind.PowerLossOrFreeze or IncidentKind.UnexpectedShutdown;
 
     private async Task<DateTimeOffset> ResolveEvidenceEndAsync(Incident incident, CollectionOptions options, CancellationToken token)
     {

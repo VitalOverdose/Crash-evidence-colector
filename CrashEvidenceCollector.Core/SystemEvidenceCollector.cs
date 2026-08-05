@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Win32;
 
@@ -59,6 +60,33 @@ public sealed class SystemEvidenceCollector
         return items;
     }
 
+    public async Task<(IReadOnlyList<InstalledProgram> Programs, EvidenceItem Evidence)> CollectInstalledProgramsAsync(string rawDirectory, string? testDataDirectory, List<string> errors, CancellationToken cancellationToken)
+    {
+        try
+        {
+            IReadOnlyList<InstalledProgram> programs;
+            if (!string.IsNullOrWhiteSpace(testDataDirectory))
+            {
+                var fixture = Path.Combine(Path.GetFullPath(testDataDirectory), "installed-programs.json");
+                if (!File.Exists(fixture))
+                {
+                    errors.Add("Installed programs: Fixture not found: installed-programs.json");
+                    return ([], new("Installed programs", EvidenceState.Warning, "Fixture not found", Error: "installed-programs.json is missing from the test-data folder."));
+                }
+                programs = InstalledProgramInventory.Parse(await File.ReadAllTextAsync(fixture, cancellationToken).ConfigureAwait(false));
+            }
+            else programs = InstalledProgramInventory.ReadFromRegistry();
+            var path = Path.Combine(rawDirectory, "installed-programs.json");
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(programs, JsonDefaults.Indented), cancellationToken).ConfigureAwait(false);
+            return (programs, new("Installed programs", EvidenceState.Success, $"Recorded {programs.Count} installed program(s) from the registry uninstall inventory. Windows updates and hidden system components are excluded; they are inventoried separately.", [path]));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            errors.Add("Installed programs: " + ex.Message);
+            return ([], new("Installed programs", EvidenceState.Failure, "Collection failed", Error: ex.Message));
+        }
+    }
+
     private static async Task<(bool Success, string Output, string Error)> GetOutputAsync(string fixture, string script, string? testDataDirectory, CancellationToken token)
     {
         if (!string.IsNullOrWhiteSpace(testDataDirectory))
@@ -101,4 +129,72 @@ public sealed class SystemEvidenceCollector
         try { using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"); return string.Join("; ", (key?.GetValue("PagingFiles") as string[]) ?? ["(not set)"]); }
         catch (Exception ex) { errors.Add("Page-file configuration: " + ex.Message); return "Unavailable: " + ex.Message; }
     }
+}
+
+/// <summary>
+/// Reads the user-visible installed-program inventory from the registry uninstall
+/// keys. Win32_Product is deliberately never queried: enumerating it triggers MSI
+/// consistency checks and self-repair, which violates the read-only guarantee.
+/// </summary>
+public static class InstalledProgramInventory
+{
+    public static readonly TimeSpan RecentInstallWindow = TimeSpan.FromDays(14);
+
+    public static IReadOnlyList<InstalledProgram> ReadFromRegistry()
+    {
+        var programs = new List<InstalledProgram>();
+        var roots = new (RegistryHive Hive, RegistryView View, string Source)[]
+        {
+            (RegistryHive.LocalMachine, RegistryView.Registry64, "HKLM 64-bit uninstall key"),
+            (RegistryHive.LocalMachine, RegistryView.Registry32, "HKLM 32-bit uninstall key"),
+            (RegistryHive.CurrentUser, RegistryView.Default, "HKCU uninstall key")
+        };
+        foreach (var root in roots)
+        {
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(root.Hive, root.View);
+                using var uninstall = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+                if (uninstall is null) continue;
+                foreach (var subKeyName in uninstall.GetSubKeyNames())
+                {
+                    try { using var key = uninstall.OpenSubKey(subKeyName); var program = FromRegistryKey(key, root.Source); if (program is not null) programs.Add(program); }
+                    catch { /* one unreadable entry must not abort the inventory */ }
+                }
+            }
+            catch { /* an inaccessible hive/view must not abort the other roots */ }
+        }
+        return Normalize(programs);
+    }
+
+    private static InstalledProgram? FromRegistryKey(RegistryKey? key, string source)
+    {
+        var displayName = (key?.GetValue("DisplayName") as string)?.Trim();
+        if (key is null || string.IsNullOrWhiteSpace(displayName)) return null;
+        // Updates and hidden servicing entries belong to windows-updates.txt, not
+        // the user-visible program list Programs & Features would show.
+        if (key.GetValue("SystemComponent") is int component && component == 1) return null;
+        if (key.GetValue("ParentKeyName") is string parent && !string.IsNullOrWhiteSpace(parent)) return null;
+        if (key.GetValue("ReleaseType") is string releaseType && releaseType is "Security Update" or "Update Rollup" or "Hotfix") return null;
+        return new(displayName, (key.GetValue("DisplayVersion") as string)?.Trim(), (key.GetValue("Publisher") as string)?.Trim(), ParseInstallDate(key.GetValue("InstallDate") as string), (key.GetValue("InstallLocation") as string)?.Trim(), source);
+    }
+
+    // The registry records install dates as a local "yyyyMMdd" string with no time
+    // of day; midnight local time is therefore a date-resolution value, not an
+    // instant, and same-day installs are treated as before a later-that-day crash.
+    public static DateTimeOffset? ParseInstallDate(string? value)
+        => DateTime.TryParseExact(value?.Trim(), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed) ? new DateTimeOffset(parsed) : null;
+
+    public static IReadOnlyList<InstalledProgram> Parse(string json)
+        => Normalize(JsonSerializer.Deserialize<List<InstalledProgram>>(json, JsonDefaults.Indented) ?? []);
+
+    public static IReadOnlyList<InstalledProgram> RecentInstalls(IReadOnlyList<InstalledProgram> programs, DateTimeOffset incidentTimestamp)
+        => programs.Where(program => program.InstallDate is not null && program.InstallDate.Value <= incidentTimestamp && incidentTimestamp - program.InstallDate.Value <= RecentInstallWindow).ToList();
+
+    private static IReadOnlyList<InstalledProgram> Normalize(IEnumerable<InstalledProgram> programs)
+        => programs.Where(program => !string.IsNullOrWhiteSpace(program.Name))
+            .DistinctBy(program => $"{program.Name}|{program.Version}", StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(program => program.InstallDate ?? DateTimeOffset.MinValue)
+            .ThenBy(program => program.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }

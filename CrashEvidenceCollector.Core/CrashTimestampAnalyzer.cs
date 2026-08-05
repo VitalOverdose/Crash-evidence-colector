@@ -20,6 +20,17 @@ public static class CrashTimestampAnalyzer
             NextBootTime = incident.RebootTime
         };
 
+        // An application failure is timestamped exactly by its own record; boot
+        // boundaries and dump headers describe kernel crashes and do not apply.
+        if (incident.Kind is IncidentKind.ApplicationCrash)
+        {
+            result.SelectedCrashTime = incident.Timestamp;
+            result.SelectedCrashTimeSource = "Application failure record timestamp";
+            result.Confidence = CrashTimeConfidence.WindowsReported;
+            result.Explanation = "Windows recorded this application failure as it happened, so the event's own timestamp is the failure time. Boot boundaries and kernel dump headers are not relevant to an application-level failure.";
+            return result;
+        }
+
         result.WerSystemErrorEventTime = events.Where(IsWerBugcheck).Select(item => (DateTimeOffset?)item.Timestamp).OrderBy(item => item).FirstOrDefault();
         result.KernelPowerEventTime = events.Where(item => item.Provider.Equals("Microsoft-Windows-Kernel-Power", StringComparison.OrdinalIgnoreCase) && item.EventId == 41).Select(item => (DateTimeOffset?)item.Timestamp).OrderBy(item => item).FirstOrDefault();
         var event6008 = events.Where(item => item.Provider.Equals("EventLog", StringComparison.OrdinalIgnoreCase) && item.EventId == 6008).OrderBy(item => item.Timestamp).FirstOrDefault();
@@ -32,6 +43,21 @@ public static class CrashTimestampAnalyzer
             result.SelectedCrashTimeSource = "Crash time stored in the dump header";
             result.Confidence = CrashTimeConfidence.ExactDumpHeader;
             result.Explanation = "The debugger exposed a dump-header crash time and it occurs before the confirmed next boot. Dump file creation/modification times were not used as the crash time.";
+            return result;
+        }
+
+        // Reject the reported value when the same session kept logging after it:
+        // Windows can record the session's start time instead of its shutdown time.
+        var reportedIsContradicted = result.Event6008PreviousShutdownTime is not null && result.NextBootTime is not null
+            && events.Any(item => item.Timestamp > result.Event6008PreviousShutdownTime.Value.AddSeconds(2) && item.Timestamp < result.NextBootTime.Value);
+        if (reportedIsContradicted)
+        {
+            var lastSignOfLife = events.Where(item => item.Timestamp < result.NextBootTime!.Value && !IsBoot(item)).OrderByDescending(item => item.Timestamp).FirstOrDefault();
+            result.EstimatedRangeStart = lastSignOfLife?.Timestamp;
+            result.EstimatedRangeEnd = result.NextBootTime;
+            result.SelectedCrashTimeSource = "Estimated between final pre-crash evidence and next boot";
+            result.Confidence = CrashTimeConfidence.EstimatedRange;
+            result.Explanation = $"Windows reported an unexpected shutdown at {result.Event6008PreviousShutdownTime:O}, but later events in that same boot session show the system was still running, so the reported value was rejected as the crash time. The crash occurred between the final recorded activity at {result.EstimatedRangeStart:O} and the confirmed next boot at {result.NextBootTime:O}.";
             return result;
         }
 

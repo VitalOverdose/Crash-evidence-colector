@@ -40,11 +40,60 @@ public sealed class IncidentDetector(EventLogReader eventLogReader, StructuredLo
         }
         return correlated.Select(incident =>
         {
-            var previousBoot = bootEvents.LastOrDefault(entry => entry.Timestamp <= incident.Timestamp)?.Timestamp;
             var reportBoundary = (incident.RecordedAt ?? incident.Timestamp).AddMinutes(5);
-            var nextBoot = bootEvents.FirstOrDefault(entry => entry.Timestamp > incident.Timestamp && entry.Timestamp <= reportBoundary)?.Timestamp;
-            return incident with { BootTime = previousBoot, RebootTime = nextBoot };
+            // Windows logs several boot markers per startup (Kernel-General 12, then
+            // EventLog 6005). Resolve the whole cluster that produced this crash record,
+            // otherwise "the next boot" can match the previous session's second marker.
+            // Only a crash/shutdown is followed by a reboot that writes its record.
+            // An application failure has no reboot, so the backward-looking cluster
+            // search must never run for it.
+            var nextBoot = (IsShutdownFamily(incident.Kind)
+                ? RebootBoundary(bootEvents.Select(entry => entry.Timestamp).ToList(), incident.RecordedAt ?? incident.Timestamp)
+                : null)
+                ?? bootEvents.FirstOrDefault(entry => entry.Timestamp > incident.Timestamp && entry.Timestamp <= reportBoundary)?.Timestamp;
+            if (nextBoot is not null && nextBoot <= incident.Timestamp) nextBoot = null;
+            var corrected = CorrectContradictedShutdownTime(incident, nextBoot, events);
+            if (!ReferenceEquals(corrected, incident))
+                nextBoot = bootEvents.FirstOrDefault(entry => entry.Timestamp > corrected.Timestamp && entry.Timestamp <= reportBoundary)?.Timestamp ?? nextBoot;
+            var previousBoot = bootEvents.LastOrDefault(entry => entry.Timestamp <= corrected.Timestamp)?.Timestamp;
+            return corrected with { BootTime = previousBoot, RebootTime = nextBoot };
         }).OrderByDescending(x => x.Timestamp).ToList();
+    }
+
+    /// <summary>
+    /// Returns the first boot marker of the startup that recorded <paramref name="recordedAt"/>.
+    /// Markers within five minutes of each other belong to one startup, so the earliest of
+    /// that cluster is the moment Windows actually came back.
+    /// </summary>
+    public static DateTimeOffset? RebootBoundary(IReadOnlyList<DateTimeOffset> bootTimes, DateTimeOffset recordedAt)
+    {
+        var ordered = bootTimes.Where(time => time <= recordedAt).OrderBy(time => time).ToList();
+        if (ordered.Count == 0) return null;
+        var earliest = ordered[^1];
+        for (var index = ordered.Count - 2; index >= 0 && earliest - ordered[index] <= TimeSpan.FromMinutes(5); index--) earliest = ordered[index];
+        return earliest;
+    }
+
+    /// <summary>
+    /// Windows sometimes writes a previous-shutdown time in Event 6008 that is really
+    /// the previous session's start. Recorded activity after that instant but before
+    /// the next boot proves the system was still running, so the reported value cannot
+    /// be the shutdown time; the incident is re-anchored to the final sign of life.
+    /// </summary>
+    public static Incident CorrectContradictedShutdownTime(Incident incident, DateTimeOffset? nextBoot, IReadOnlyList<EvidenceEvent> events)
+    {
+        if (incident.TimeConfidence != IncidentTimeConfidence.Event6008ReportedShutdown || nextBoot is null) return incident;
+        var lastSignOfLife = events
+            .Where(entry => entry.Timestamp > incident.Timestamp.AddSeconds(2) && entry.Timestamp < nextBoot.Value)
+            .OrderByDescending(entry => entry.Timestamp)
+            .FirstOrDefault();
+        if (lastSignOfLife is null) return incident;
+        return incident with
+        {
+            Timestamp = lastSignOfLife.Timestamp,
+            TimestampBasis = $"Final recorded activity before the next boot. Windows reported an unexpected shutdown at {incident.Timestamp:HH:mm:ss}, but {events.Count(entry => entry.Timestamp > incident.Timestamp.AddSeconds(2) && entry.Timestamp < nextBoot.Value)} later event(s) in that session show the system was still running, so the reported value was rejected.",
+            TimeConfidence = IncidentTimeConfidence.EstimatedFromRebootBoundary
+        };
     }
 
     public static Incident? ToIncident(EvidenceEvent entry)

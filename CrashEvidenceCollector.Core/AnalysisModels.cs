@@ -65,6 +65,10 @@ public sealed class SymbolDiagnostics
 public sealed class AnalyzeData
 {
     public string? BugCheckCode { get; set; }
+    // True only when CDB did not expose a code and the selected Windows event
+    // supplied it as context. Matchers and reports must not call this a
+    // debugger-confirmed dump code.
+    public bool BugCheckCodeFromSelectedIncidentFallback { get; set; }
     public List<string> BugCheckParameters { get; set; } = [];
     public string? BugCheckString { get; set; }
     public string? ProcessName { get; set; }

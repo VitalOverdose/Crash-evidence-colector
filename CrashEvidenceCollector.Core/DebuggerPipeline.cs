@@ -59,9 +59,16 @@ public static class DebuggerCommandPlanner
         var commands = new List<DebuggerCommand>
         {
             new(".symfix+", "Add the Microsoft public symbol server to the configured local cache"),
-            new(".reload /f", "Force symbol validation"), new("vertarget", "Target OS and architecture"),
+            // Capture the dump's own code before any network-dependent symbol
+            // operation so a slow symbol server cannot erase association proof.
+            new(".bugcheck", "Raw bugcheck and parameters"),
+            // Reload only the Windows kernel before the essential analysis. A
+            // forced reload of every third-party image can consume the complete
+            // timeout before !analyze runs, especially on the first new dump.
+            new(".reload /f nt", "Load and validate Windows kernel symbols"),
+            new("!analyze -v", "Verbose debugger analysis"),
+            new("vertarget", "Target OS and architecture"),
             new("!sysinfo machineid", "Machine identity"), new("!sysinfo smbios", "Firmware information"), new("!sysinfo cpuinfo", "Processor information"),
-            new("!analyze -v", "Verbose debugger analysis"), new(".bugcheck", "Raw bugcheck and parameters"),
             new(".exr -1", "Current exception record"), new(".cxr -1", "Current context record"), new(".ecxr", "Exception context when available"),
             new("r", "Registers"), new("kv", "Verbose stack"), new("kp", "Stack with parameters"), new("kP", "Expanded stack parameters"),
             new("!thread", "Current thread"), new("!process 0 1", "Process summary"), new("lm", "Loaded modules"), new("lm t n", "Module timestamps and names"),

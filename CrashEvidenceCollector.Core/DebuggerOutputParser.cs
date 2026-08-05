@@ -83,6 +83,7 @@ public sealed partial class DebuggerOutputParser
         result.Modules = ParseModules(analyze.RawSections, result.StackFrames).ToList();
         result.Symbols = ParseSymbols(normalized, result.StackFrames);
         dump.DumpHeaderTime = ParseDumpHeaderTime(normalized);
+        ParseBugcheckCommand(analyze);
         ParseExceptionRecord(analyze);
         ParseAnalysisElapsed(analyze);
         return result;
@@ -228,6 +229,19 @@ public sealed partial class DebuggerOutputParser
         var parameters = ExceptionParameterLineRegex().Matches(section).Select(match => new { Index = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), Value = NormalizeNumeric(match.Groups[2].Value) }).OrderBy(item => item.Index).ToList();
         if (parameters.Count > 0) { analyze.ExceptionParameters.Clear(); analyze.ExceptionParameters.AddRange(parameters.Select(item => item.Value)); }
     }
+
+    private static void ParseBugcheckCommand(AnalyzeData analyze)
+    {
+        if (!analyze.RawSections.TryGetValue(".bugcheck", out var section) || string.IsNullOrWhiteSpace(section)) return;
+        var code = BugcheckCommandCodeRegex().Match(section);
+        if (code.Success) analyze.BugCheckCode = NormalizeNumeric(code.Groups[1].Value);
+        var arguments = BugcheckCommandArgumentsRegex().Match(section);
+        if (!arguments.Success) return;
+        var values = AddressRegex().Matches(arguments.Groups[1].Value).Select(match => NormalizeNumeric(match.Value)).Take(4).ToList();
+        if (values.Count == 0) return;
+        analyze.BugCheckParameters.Clear();
+        analyze.BugCheckParameters.AddRange(values);
+    }
     private static bool LooksLikeDebuggerField(string key) => key.Length >= 3 && key.All(character => char.IsLetterOrDigit(character) || character is '_' or '.');
     private static string NormalizeNumeric(string value) { var match = AddressRegex().Match(value); if (!match.Success) return value.Trim(); var numeric = match.Value.Replace("`", string.Empty); if (numeric.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) numeric = numeric[2..]; return "0x" + numeric.TrimStart('0').PadLeft(1, '0'); }
     private static string? FirstAddress(string value) { var match = AddressRegex().Match(value); if (!match.Success) return null; var numeric = match.Value.Replace("`", string.Empty); if (numeric.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) numeric = numeric[2..]; return "0x" + numeric; }
@@ -260,6 +274,8 @@ public sealed partial class DebuggerOutputParser
     [GeneratedRegex(@"(?mi)^\s*ExceptionAddress:\s*([0-9a-fA-F`x]+)(?:\s+\((?<symbol>[^)]+)\))?")] private static partial Regex ExceptionAddressRegex();
     [GeneratedRegex(@"(?mi)^\s*ExceptionCode:\s*([0-9a-fA-F`x]+)")] private static partial Regex ExceptionCodeLineRegex();
     [GeneratedRegex(@"(?mi)^\s*Parameter\[(\d+)\]:\s*([0-9a-fA-F`x]+)")] private static partial Regex ExceptionParameterLineRegex();
+    [GeneratedRegex(@"(?mi)^\s*Bugcheck\s+code\s+([0-9a-fA-F`x]+)")] private static partial Regex BugcheckCommandCodeRegex();
+    [GeneratedRegex(@"(?mi)^\s*Arguments\s+(.+)$")] private static partial Regex BugcheckCommandArgumentsRegex();
 }
 
 public static class ModuleClassifier

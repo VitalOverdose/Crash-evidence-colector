@@ -3,6 +3,15 @@
   <ItemGroup>
     <ProjectReference Include="..\CrashEvidenceCollector.Core\CrashEvidenceCollector.Core.csproj" />
     <ProjectReference Include="..\CrashEvidenceCollector.Helper\CrashEvidenceCollector.Helper.csproj" ReferenceOutputAssembly="false" />
+    <!-- Vendored snapshot of the read-only donor library (net8.0-windows loads under
+         net10). Referencing the DLL, not the project, keeps this solution buildable
+         while the donor repo is mid-edit; refresh libs\EliteBrowserShell.dll
+         deliberately from a known-good donor build. -->
+    <Reference Include="EliteBrowserShell">
+      <HintPath>..\libs\EliteBrowserShell.dll</HintPath>
+    </Reference>
+    <!-- The app's single package: required by the vendored shell's WebView2 composites. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -11,7 +20,16 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The EliteBrowserShell composites' DPI system assumes PerMonitorV2; the WinForms
+         bootstrap otherwise defaults to SystemAware, which silently breaks their scaling. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\cec.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\cec.png" />
+    <EmbeddedResource Include="Assets\cec.ico" />
+  </ItemGroup>
 
   <Target Name="CopyElevatedHelper" AfterTargets="Build">
     <ItemGroup><HelperFiles Include="$(MSBuildProjectDirectory)\..\CrashEvidenceCollector.Helper\bin\$(Configuration)\net10.0-windows\CrashEvidenceCollector.Helper.*" /></ItemGroup>

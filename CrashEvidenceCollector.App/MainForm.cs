@@ -1,10 +1,18 @@
 using System.Diagnostics;
 using CrashEvidenceCollector.Core;
+using ProfessorSnowsVideoDownloader.Composites;
 
 namespace CrashEvidenceCollector.App;
 
 public sealed class MainForm : Form
 {
+    private static readonly Image? Logo = LoadLogo();
+    private static Image? LoadLogo()
+    {
+        try { using var stream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.png"); return stream is null ? null : Image.FromStream(stream); }
+        catch { return null; }
+    }
+
     private readonly Color _nav = Color.FromArgb(20, 35, 59);
     private readonly Color _accent = Color.FromArgb(40, 105, 190);
     private readonly TabControl _pages = new() { Dock = DockStyle.Fill, Appearance = TabAppearance.FlatButtons, ItemSize = new Size(0, 1), SizeMode = TabSizeMode.Fixed };
@@ -28,20 +36,28 @@ public sealed class MainForm : Form
     private readonly Button _saveText = SecondaryButton("Save text as…");
     private readonly Button _printPdf = SecondaryButton("Print / save PDF");
     private readonly Button _history = SecondaryButton("Review past history");
-    private readonly WebBrowser _reportViewer = new() { Dock = DockStyle.Fill, ScriptErrorsSuppressed = true };
+    private readonly ReportViewerPanel _reportViewer = new() { Dock = DockStyle.Fill };
     private readonly RichTextBox _rawDebuggerViewer = new() { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None, Font = new Font("Consolas", 9), BackColor = Color.FromArgb(17, 28, 45), ForeColor = Color.FromArgb(220, 232, 248), WordWrap = false };
     private readonly TabControl _workspaceTabs = new() { Dock = DockStyle.Fill };
+    private readonly IncidentMetricsView _metrics = new();
+    private readonly LiveMonitorView _liveMonitor = new();
     private readonly NumericUpDown _before = new() { Minimum = 1, Maximum = 1440, Value = 10, Width = 90 };
     private readonly NumericUpDown _after = new() { Minimum = 1, Maximum = 1440, Value = 5, Width = 90 };
     private readonly NumericUpDown _debuggerTimeout = new() { Minimum = 15, Maximum = 1800, Value = 180, Increment = 15, Width = 90 };
     private readonly CheckBox _analyzeDumps = new() { Text = "Analyse copied crash dumps with the Microsoft debugger", AutoSize = true, Checked = true };
     private readonly CheckBox _fullDump = new() { Text = "Include full MEMORY.DMP in ZIP (may be very large and sensitive)", AutoSize = true };
     private readonly CheckBox _redact = new() { Text = "Redact Windows account name and profile path in reports", AutoSize = true, Checked = true };
+    private readonly CheckBox _webLookup = new() { Text = "Look up recently installed programs online (Microsoft winget source) for report context", AutoSize = true, Checked = true };
+    private readonly CheckBox _monitorAutoStart = new() { Text = "Resume background monitoring automatically when this app starts", AutoSize = true };
+    private readonly CheckBox _alwaysElevate = new() { Text = "Always run Crash Evidence Collector as administrator (one prompt at startup instead of one per collection)", AutoSize = true };
+    private readonly Button _elevateNow = SecondaryButton("Restart as administrator");
+    private readonly CheckBox _startWithWindows = new() { Text = "Start Crash Evidence Collector when Windows starts (so monitoring survives reboots)", AutoSize = true };
     private readonly CheckBox _testMode = new() { Text = "Use local test-data mode", AutoSize = true };
     private readonly TextBox _output = new() { Width = 530 };
     private readonly TextBox _testData = new() { Width = 530 };
     private readonly StructuredLog _log = new();
     private IReadOnlyList<Incident> _incidents = [];
+    private IReadOnlyList<Incident> _retainedReportIncidents = [];
     private HashSet<string> _newIncidentIds = [];
     private CollectionOptions _settings = new();
     private CancellationTokenSource? _collectionCts;
@@ -50,6 +66,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Crash Evidence Collector"; MinimumSize = new Size(1050, 680); Size = new Size(1240, 790); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9.5f); BackColor = Color.FromArgb(246, 248, 251);
+        try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
         Controls.Add(_pages); Controls.Add(BuildNavigation()); Controls.Add(_modeBanner);
         _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSettings());
         _timeline.Columns.Add("When", 180); _timeline.Columns.Add("Type", 150); _timeline.Columns.Add("Code / incident", 330); _timeline.Columns.Add("Plain-English meaning", 560); _timeline.Columns.Add("Source", 300);
@@ -66,7 +83,8 @@ public sealed class MainForm : Form
         _copyJson.Click += async (_, _) => await CopyFileContentsAsync(_lastResult?.JsonPath);
         _saveText.Click += (_, _) => SaveReportText();
         _printPdf.Click += (_, _) => PrintOrSavePdf();
-        _reportViewer.DocumentCompleted += (_, _) => _printPdf.Enabled = _lastResult is not null;
+        _reportViewer.Navigated += (_, _) => _printPdf.Enabled = _lastResult is not null;
+        _reportViewer.NavigationFailed += (_, status) => _progressText.Text = $"The report could not be displayed in the embedded viewer ({status}). Use Open output folder to view report.html in your browser.";
         _history.Click += (_, _) => _timelineRange.SelectedIndex = 9;
         Shown += async (_, _) => await InitializeAsync(); FormClosing += (_, _) => _collectionCts?.Cancel();
     }
@@ -74,9 +92,14 @@ public sealed class MainForm : Form
     private Control BuildNavigation()
     {
         var panel = new Panel { Dock = DockStyle.Left, Width = 210, BackColor = _nav, Padding = new Padding(14, 22, 14, 14) };
-        var title = new Label { Dock = DockStyle.Top, Height = 70, Text = "Crash Evidence\nCollector", ForeColor = Color.White, Font = new Font("Segoe UI Semibold", 15) }; panel.Controls.Add(title);
         var buttons = new[] { ("Crash workspace", 0), ("Settings", 1) };
         foreach (var (text, page) in buttons.Reverse()) { var button = NavButton(text); button.Click += (_, _) => _pages.SelectedIndex = page; panel.Controls.Add(button); }
+        // Added after the buttons so it docks above them. The logo carries the app
+        // name and tagline; the old text label remains only as a fallback.
+        Control branding = Logo is not null
+            ? new PictureBox { Dock = DockStyle.Top, Height = 190, Image = Logo, SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 0, 10) }
+            : new Label { Dock = DockStyle.Top, Height = 70, Text = "Crash Evidence\nCollector", ForeColor = Color.White, Font = new Font("Segoe UI Semibold", 15) };
+        panel.Controls.Add(branding);
         var safety = new Label { Dock = DockStyle.Bottom, Height = 92, Text = "READ-ONLY\nNever changes drivers, services, registry settings or crash configuration.", ForeColor = Color.FromArgb(180, 198, 222), Font = new Font("Segoe UI", 8.5f) }; panel.Controls.Add(safety);
         return panel;
     }
@@ -102,8 +125,9 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(220, 226, 234)
         };
 
+        // The floating headline label doubles as the timeline's title; a separate
+        // "Incident timeline" label sat underneath it, mostly hidden, since v1.
         var timelinePanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(14) };
-        var timelineTitle = new Label { Dock = DockStyle.Top, Height = 40, Text = "Incident timeline", Font = new Font("Segoe UI Semibold", 14) };
         var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 72, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
         filters.Controls.Add(new Label { Text = "Show", AutoSize = true, Padding = new Padding(0, 7, 6, 0) });
         filters.Controls.Add(_timelineRange);
@@ -114,7 +138,6 @@ public sealed class MainForm : Form
         filters.Controls.Add(_timelineCount);
         timelinePanel.Controls.Add(_timeline);
         timelinePanel.Controls.Add(filters);
-        timelinePanel.Controls.Add(timelineTitle);
         workspace.Panel1.Padding = new Padding(0, 0, 4, 0);
         workspace.Panel1.Controls.Add(timelinePanel);
 
@@ -144,6 +167,10 @@ public sealed class MainForm : Form
         detailWorkspace.Panel1.Controls.Add(selectedPanel);
 
         _workspaceTabs.Padding = new Point(14, 6);
+        var metricsPage = new TabPage("Metrics & trends") { BackColor = Color.White, Padding = new Padding(4) };
+        metricsPage.Controls.Add(_metrics);
+        var monitorPage = new TabPage("Live monitor") { BackColor = Color.White, Padding = new Padding(4) };
+        monitorPage.Controls.Add(_liveMonitor);
         var evidencePage = new TabPage("Evidence status") { BackColor = Color.White, Padding = new Padding(10) };
         evidencePage.Controls.Add(_evidence);
         var reportPage = new TabPage("Readable report") { BackColor = Color.White, Padding = new Padding(4) };
@@ -156,6 +183,8 @@ public sealed class MainForm : Form
         reportPage.Controls.Add(reportPanel);
         var rawPage = new TabPage("Raw debugger output") { BackColor = Color.FromArgb(17, 28, 45), Padding = new Padding(4) };
         rawPage.Controls.Add(_rawDebuggerViewer);
+        _workspaceTabs.TabPages.Add(metricsPage);
+        _workspaceTabs.TabPages.Add(monitorPage);
         _workspaceTabs.TabPages.Add(evidencePage);
         _workspaceTabs.TabPages.Add(reportPage);
         _workspaceTabs.TabPages.Add(rawPage);
@@ -163,11 +192,12 @@ public sealed class MainForm : Form
 
         workspace.Panel2.Padding = new Padding(4, 0, 0, 0);
         workspace.Panel2.Controls.Add(detailWorkspace);
+        // Dock order matters: the headline must dock before the workspace fills the
+        // remainder, or it floats over the panel's first rows instead of above them.
         root.Controls.Add(workspace);
         root.Controls.Add(_headline);
         _headline.Dock = DockStyle.Top;
         _headline.Height = 48;
-        root.Controls.SetChildIndex(_headline, 0);
         page.Controls.Add(root);
         return page;
     }
@@ -180,6 +210,18 @@ public sealed class MainForm : Form
         root.Controls.Add(_analyzeDumps); root.Controls.Add(Row("Debugger timeout (seconds)", _debuggerTimeout));
         root.Controls.Add(_redact); root.Controls.Add(_fullDump);
         root.Controls.Add(new Label { Text = "Crash dumps can contain passwords, document fragments and other sensitive data. Full dumps are excluded by default.", ForeColor = Color.FromArgb(140, 75, 20), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 10, 0, 14) });
+        root.Controls.Add(_webLookup);
+        root.Controls.Add(new Label { Text = "Online lookup sends only the names of recently installed programs to the Microsoft winget source to add publisher, version and homepage context. Matches are labelled as online metadata, never as local evidence.", ForeColor = Color.FromArgb(75, 85, 99), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
+        root.Controls.Add(_monitorAutoStart);
+        root.Controls.Add(_startWithWindows);
+        root.Controls.Add(_alwaysElevate);
+        root.Controls.Add(new Label { Text = ElevationService.IsElevated
+            ? "This instance is running as administrator: protected crash dumps are copied directly and no per-collection prompt appears. Analysis still runs against copied evidence only, and no system setting is ever changed."
+            : "This instance runs unelevated (recommended default). Protected dumps are copied by the separate single-purpose helper, which asks for consent once per collection. Running the whole app elevated replaces that with a single prompt when it starts.", ForeColor = Color.FromArgb(75, 85, 99), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 8) });
+        _elevateNow.Enabled = !ElevationService.IsElevated;
+        _elevateNow.Click += (_, _) => RestartElevated();
+        root.Controls.Add(_elevateNow);
+        root.Controls.Add(new Label { Text = "Start-with-Windows adds a single startup entry for this app in your user registry (HKCU Run) — the only registry value the app ever writes. Unticking removes it. System diagnostics always remain read-only.", ForeColor = Color.FromArgb(75, 85, 99), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
         var outputBrowse = SecondaryButton("Browse…"); outputBrowse.Click += (_, _) => BrowseFolder(_output); root.Controls.Add(Row("Output folder", _output, outputBrowse));
         root.Controls.Add(_testMode); var testBrowse = SecondaryButton("Browse…"); testBrowse.Click += (_, _) => BrowseFolder(_testData); root.Controls.Add(Row("Copied sample-log folder", _testData, testBrowse));
         root.Controls.Add(new Label { Text = "TEST-DATA MODE reads copied XML logs and inventory text from the selected folder. It is clearly labelled and never substitutes sample values into normal collection.", ForeColor = Color.FromArgb(95, 63, 0), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 8, 0, 14) });
@@ -191,12 +233,18 @@ public sealed class MainForm : Form
     private async Task InitializeAsync()
     {
         _settings = await SettingsStore.LoadAsync(); LoadSettingsControls();
+        // Honour the remembered preference once, at startup, where the consent
+        // dialog cannot interrupt an in-progress collection.
+        if (_settings.AlwaysRunElevated && !ElevationService.IsElevated && ElevationService.Relaunch() is null) { Close(); return; }
+        if (_settings.StartMonitoringOnLaunch) _liveMonitor.StartMonitoring();
+        if (ElevationService.IsElevated) { _modeBanner.Visible = true; _modeBanner.Text = "ADMINISTRATOR MODE — protected crash dumps are copied without a per-collection prompt. Nothing on the system is modified."; }
         try
         {
             var since = _settings.IsTestDataMode ? DateTimeOffset.MinValue : await IncidentDetector.ReadLastSuccessfulRunAsync(CancellationToken.None);
             var detector = new IncidentDetector(new EventLogReader(), _log);
             var newlyDetected = await detector.DetectAsync(since, _settings.TestDataDirectory, CancellationToken.None); _newIncidentIds = newlyDetected.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
             _incidents = _settings.IsTestDataMode ? newlyDetected : await detector.DetectAsync(DateTimeOffset.Now.AddDays(-30), null, CancellationToken.None);
+            _retainedReportIncidents = await ReportHistoryReader.LoadIncidentsAsync(_settings.OutputRoot, CancellationToken.None);
             PopulateTimeline(); if (!_settings.IsTestDataMode) await IncidentDetector.MarkSuccessfulRunAsync(CancellationToken.None);
         }
         catch (Exception ex) { _headline.Text = "Incident detection could not complete"; _incidentDetail.Text = ex.Message; await _log.WriteAsync("error", "Startup detection failed", new { ex.Message }); }
@@ -211,15 +259,20 @@ public sealed class MainForm : Form
         {
             var progress = new Progress<CollectionProgress>(p => { _progress.Value = Math.Clamp(p.Percent, 0, 100); _progressText.Text = $"{p.Category}: {p.Message}"; AddOrUpdateEvidence(p.Category, p.State, p.Message); });
             var engine = new EvidenceCollectionEngine(new EventLogReader(), new SystemEvidenceCollector(), new FileEvidenceCollector(), new ReportWriter(), _log);
-            Func<string, bool, CancellationToken, Task<HelperResponse>> elevated = (destination, full, token) => ElevatedHelperIpc.RequestDumpCopyAsync(Path.Combine(AppContext.BaseDirectory, "CrashEvidenceCollector.Helper.exe"), destination, full, token, incident.Timestamp);
+            // An elevated instance already has dump access, so the helper — and its
+            // consent prompt — is skipped entirely.
+            Func<string, bool, CancellationToken, Task<HelperResponse>>? elevated = ElevationService.IsElevated
+                ? null
+                : (destination, full, token) => ElevatedHelperIpc.RequestDumpCopyAsync(Path.Combine(AppContext.BaseDirectory, "CrashEvidenceCollector.Helper.exe"), destination, full, token, incident.Timestamp);
             _lastResult = await engine.CollectAsync(incident, _incidents, _settings, progress, _collectionCts.Token, elevated);
             PopulateEvidence(_lastResult.Report);
-            _reportViewer.Navigate(_lastResult.HtmlPath);
+            _reportViewer.ShowReportFile(_lastResult.HtmlPath);
             var primaryDump = _lastResult.Report.DumpAnalyses.FirstOrDefault(item => item.Association.IsPrimaryForIncident);
             _rawDebuggerViewer.Text = primaryDump?.Dump.RawOutputPath is { } rawPath && File.Exists(rawPath) ? await File.ReadAllTextAsync(rawPath) : "No debugger output was available for this incident.";
             _openOutput.Enabled = _copySummary.Enabled = _copyReport.Enabled = _copyJson.Enabled = _saveText.Enabled = true;
-            _printPdf.Enabled = _reportViewer.ReadyState == WebBrowserReadyState.Complete;
-            _workspaceTabs.SelectedIndex = 1;
+            _retainedReportIncidents = await ReportHistoryReader.LoadIncidentsAsync(_settings.OutputRoot, CancellationToken.None);
+            UpdateMetrics();
+            _workspaceTabs.SelectedIndex = 3;
             _pages.SelectedIndex = 0;
         }
         catch (OperationCanceledException) { _progressText.Text = "Collection cancelled. Partial files were left intact for inspection."; }
@@ -231,22 +284,7 @@ public sealed class MainForm : Form
     {
         _timeline.Items.Clear();
         var referenceTime = _settings.IsTestDataMode && _incidents.Count > 0 ? _incidents.Max(x => x.Timestamp) : DateTimeOffset.Now;
-        // The immediate-history selector deliberately provides fine-grained hours
-        // rather than forcing users to jump from one hour directly to a full day.
-        var range = _timelineRange.SelectedIndex switch
-        {
-            0 => TimeSpan.FromMinutes(30),
-            2 => TimeSpan.FromHours(2),
-            3 => TimeSpan.FromHours(3),
-            4 => TimeSpan.FromHours(6),
-            5 => TimeSpan.FromHours(12),
-            6 => TimeSpan.FromHours(24),
-            7 => TimeSpan.FromDays(3),
-            8 => TimeSpan.FromDays(7),
-            9 => TimeSpan.FromDays(30),
-            10 => TimeSpan.FromHours((double)_customRangeHours.Value),
-            _ => TimeSpan.FromHours(1)
-        };
+        var range = SelectedTimelineRange();
         bool MatchesType(Incident incident) => _timelineType.SelectedIndex switch
         {
             1 => true,
@@ -258,13 +296,42 @@ public sealed class MainForm : Form
         var visible = matchingType.Where(x => x.Timestamp >= referenceTime - range && x.Timestamp <= referenceTime.AddMinutes(1)).OrderByDescending(x => x.Timestamp).ToList();
         foreach (var incident in visible) { var item = new ListViewItem(incident.Timestamp.LocalDateTime.ToString("g")) { Tag = incident }; item.SubItems.Add(incident.Kind.ToString()); item.SubItems.Add(incident.Title); item.SubItems.Add(CodeDecoder.DescribeIncident(incident)); item.SubItems.Add(incident.Source); _timeline.Items.Add(item); }
         _timelineCount.Text = $"{visible.Count} shown · {matchingType.Count} matching · {_incidents.Count} total";
-        var lastHourCount = _incidents.Count(x => x.Kind is IncidentKind.BugCheck or IncidentKind.UnexpectedShutdown or IncidentKind.PowerLossOrFreeze or IncidentKind.HardwareError && x.Timestamp >= referenceTime.AddHours(-1) && x.Timestamp <= referenceTime.AddMinutes(1));
-        _headline.Text = lastHourCount == 0 ? "No system crash incidents in the last hour" : $"{lastHourCount} system incident{(lastHourCount == 1 ? string.Empty : "s")} in the last hour";
+        // The headline must describe the range the user actually selected, or a
+        // visible incident sits under a headline claiming there are none.
+        var rangeLabel = (_timelineRange.SelectedItem?.ToString() ?? "the selected range").Replace("Last ", "last ").Replace("Custom hours", $"last {range.TotalHours:0.#} hours");
+        var systemCount = visible.Count(x => x.Kind is IncidentKind.BugCheck or IncidentKind.UnexpectedShutdown or IncidentKind.PowerLossOrFreeze or IncidentKind.HardwareError);
+        _headline.Text = systemCount == 0 ? $"No system crash incidents in the {rangeLabel}" : $"{systemCount} system incident{(systemCount == 1 ? string.Empty : "s")} in the {rangeLabel}";
         _incidentDetail.Text = visible.Count == 0
             ? (_incidents.Count == 0 ? "No matching crash, bugcheck, hardware-error or unexpected-shutdown records were found in the retained timeline." : "The immediate window is clear. Choose Review past history to inspect older incidents.")
             : "Recent incidents are shown first. Select one to review and collect its focused evidence window.";
         _history.Enabled = _incidents.Any(x => x.Timestamp < referenceTime.AddHours(-1));
         _collect.Enabled = visible.Count > 0; if (_timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
+        UpdateMetrics();
+    }
+
+    // The immediate-history selector deliberately provides fine-grained hours
+    // rather than forcing users to jump from one hour directly to a full day.
+    private TimeSpan SelectedTimelineRange() => _timelineRange.SelectedIndex switch
+    {
+        0 => TimeSpan.FromMinutes(30),
+        2 => TimeSpan.FromHours(2),
+        3 => TimeSpan.FromHours(3),
+        4 => TimeSpan.FromHours(6),
+        5 => TimeSpan.FromHours(12),
+        6 => TimeSpan.FromHours(24),
+        7 => TimeSpan.FromDays(3),
+        8 => TimeSpan.FromDays(7),
+        9 => TimeSpan.FromDays(30),
+        10 => TimeSpan.FromHours((double)_customRangeHours.Value),
+        _ => TimeSpan.FromHours(1)
+    };
+
+    private void UpdateMetrics()
+    {
+        var referenceTime = _settings.IsTestDataMode && _incidents.Count > 0 ? _incidents.Max(item => item.Timestamp) : DateTimeOffset.Now;
+        var range = SelectedTimelineRange();
+        var snapshot = CrashMetricsCalculator.Build(_incidents, _retainedReportIncidents, referenceTime - range, referenceTime, _newIncidentIds, _incidents);
+        _metrics.SetMetrics(snapshot, _timelineRange.SelectedItem?.ToString() ?? "Selected range");
     }
     private void UpdateSelection()
     {
@@ -276,8 +343,8 @@ public sealed class MainForm : Form
     }
     private void PopulateEvidence(EvidenceReport report) { _evidence.Items.Clear(); foreach (var item in report.Evidence) AddOrUpdateEvidence(item.Category, item.State, item.Summary + (item.Error is null ? string.Empty : " — " + item.Error)); }
     private void AddOrUpdateEvidence(string category, EvidenceState state, string detail) { var item = _evidence.Items.Cast<ListViewItem>().FirstOrDefault(x => x.Text == category) ?? _evidence.Items.Add(category); while (item.SubItems.Count < 3) item.SubItems.Add(string.Empty); item.SubItems[1].Text = state.ToString(); item.SubItems[2].Text = detail; item.ForeColor = state switch { EvidenceState.Failure => Color.Firebrick, EvidenceState.Warning => Color.DarkGoldenrod, EvidenceState.Success => Color.SeaGreen, _ => Color.FromArgb(35, 45, 58) }; }
-    private async Task SaveSettingsAsync(bool showConfirmation = true) { _settings.MinutesBefore = (int)_before.Value; _settings.MinutesAfterStartup = (int)_after.Value; _settings.AnalyzeCrashDumps = _analyzeDumps.Checked; _settings.DebuggerTimeoutSeconds = (int)_debuggerTimeout.Value; _settings.IncludeFullMemoryDump = _fullDump.Checked; _settings.RedactAccountName = _redact.Checked; _settings.OutputRoot = _output.Text.Trim(); _settings.TestDataDirectory = _testMode.Checked ? _testData.Text.Trim() : null; await SettingsStore.SaveAsync(_settings); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; if (showConfirmation) MessageBox.Show(this, "Settings saved. Restart the app to re-run incident detection with a changed data source.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
-    private void LoadSettingsControls() { _before.Value = Math.Clamp(_settings.MinutesBefore, 1, 1440); _after.Value = Math.Clamp(_settings.MinutesAfterStartup, 1, 1440); _analyzeDumps.Checked = _settings.AnalyzeCrashDumps; _debuggerTimeout.Value = Math.Clamp(_settings.DebuggerTimeoutSeconds, 15, 1800); _fullDump.Checked = _settings.IncludeFullMemoryDump; _redact.Checked = _settings.RedactAccountName; _output.Text = _settings.OutputRoot; _testMode.Checked = _settings.IsTestDataMode; _testData.Text = _settings.TestDataDirectory ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData")); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; }
+    private async Task SaveSettingsAsync(bool showConfirmation = true) { _settings.MinutesBefore = (int)_before.Value; _settings.MinutesAfterStartup = (int)_after.Value; _settings.AnalyzeCrashDumps = _analyzeDumps.Checked; _settings.DebuggerTimeoutSeconds = (int)_debuggerTimeout.Value; _settings.IncludeFullMemoryDump = _fullDump.Checked; _settings.RedactAccountName = _redact.Checked; _settings.LookUpInstalledProgramsOnline = _webLookup.Checked; _settings.StartMonitoringOnLaunch = _monitorAutoStart.Checked; _settings.AlwaysRunElevated = _alwaysElevate.Checked; _settings.OutputRoot = _output.Text.Trim(); if (_startWithWindows.Checked != StartupRegistration.IsEnabled() && StartupRegistration.SetEnabled(_startWithWindows.Checked) is { } startupError) { MessageBox.Show(this, "The start-with-Windows entry could not be updated: " + startupError, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); _startWithWindows.Checked = StartupRegistration.IsEnabled(); } _settings.TestDataDirectory = _testMode.Checked ? _testData.Text.Trim() : null; await SettingsStore.SaveAsync(_settings); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; if (showConfirmation) MessageBox.Show(this, "Settings saved. Restart the app to re-run incident detection with a changed data source.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
+    private void LoadSettingsControls() { _before.Value = Math.Clamp(_settings.MinutesBefore, 1, 1440); _after.Value = Math.Clamp(_settings.MinutesAfterStartup, 1, 1440); _analyzeDumps.Checked = _settings.AnalyzeCrashDumps; _debuggerTimeout.Value = Math.Clamp(_settings.DebuggerTimeoutSeconds, 15, 1800); _fullDump.Checked = _settings.IncludeFullMemoryDump; _redact.Checked = _settings.RedactAccountName; _webLookup.Checked = _settings.LookUpInstalledProgramsOnline; _monitorAutoStart.Checked = _settings.StartMonitoringOnLaunch; _alwaysElevate.Checked = _settings.AlwaysRunElevated; _startWithWindows.Checked = StartupRegistration.IsEnabled(); _output.Text = _settings.OutputRoot; _testMode.Checked = _settings.IsTestDataMode; _testData.Text = _settings.TestDataDirectory ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData")); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; }
     private void ToggleCollecting(bool collecting) { _collect.Enabled = !collecting && _timeline.SelectedItems.Count > 0; _cancel.Enabled = collecting; }
     private void OpenOutput() { if (_lastResult is not null) Process.Start(new ProcessStartInfo("explorer.exe", _lastResult.OutputDirectory) { UseShellExecute = true }); }
     private void CopySummary() { if (_lastResult is null) return; var report = _lastResult.Report; Clipboard.SetText($"{report.Incident.Title} at {report.Incident.Timestamp:F}\r\nMeaning: {CodeDecoder.DescribeIncident(report.Incident)}\r\nDecoded codes: {string.Join(" | ", report.CodeInterpretations.Select(x => $"{x.RawValue} = {x.Name}").Take(8))}\r\nObservations: {string.Join(" | ", report.Observations.Select(x => x.Detail))}\r\nArchive: {_lastResult.ZipPath}"); }
@@ -293,11 +360,21 @@ public sealed class MainForm : Form
         using var dialog = new SaveFileDialog { Title = "Save readable text report", Filter = "Text report (*.txt)|*.txt|All files (*.*)|*.*", FileName = $"Crash-Evidence-{_lastResult.Report.Incident.Timestamp:yyyyMMdd-HHmmss}.txt", OverwritePrompt = true };
         if (dialog.ShowDialog(this) == DialogResult.OK) { File.Copy(_lastResult.TextPath, dialog.FileName, true); _progressText.Text = $"Saved text report to {dialog.FileName}"; }
     }
+    private void RestartElevated()
+    {
+        if (ElevationService.IsElevated) return;
+        var error = ElevationService.Relaunch();
+        if (error is null) { Close(); return; }
+        MessageBox.Show(this, error + " The app continues unelevated; protected dumps will still be offered through the separate helper during collection.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
     private void PrintOrSavePdf()
     {
-        if (_lastResult is null) return;
-        _progressText.Text = "Choose Microsoft Print to PDF in the Windows print dialog to save a PDF.";
-        _reportViewer.ShowPrintDialog();
+        if (_lastResult is null || !File.Exists(_lastResult.HtmlPath)) return;
+        // The locked viewer composite does not expose printing yet; the default browser's
+        // print dialog (Ctrl+P) offers Microsoft Print to PDF with identical output.
+        _progressText.Text = "The report opened in your default browser — press Ctrl+P and choose Microsoft Print to PDF to save a PDF.";
+        Process.Start(new ProcessStartInfo(_lastResult.HtmlPath) { UseShellExecute = true });
     }
     private static void BrowseFolder(TextBox target) { using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : string.Empty, ShowNewFolderButton = true }; if (dialog.ShowDialog() == DialogResult.OK) target.Text = dialog.SelectedPath; }
     private static Panel Card(Control child) { var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16), Margin = new Padding(0, 6, 0, 6) }; panel.Controls.Add(child); return panel; }
