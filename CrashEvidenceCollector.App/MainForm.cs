@@ -41,6 +41,19 @@ public sealed class MainForm : Form
     private readonly TabControl _workspaceTabs = new() { Dock = DockStyle.Fill };
     private readonly IncidentMetricsView _metrics = new();
     private readonly LiveMonitorView _liveMonitor = new();
+    private readonly ReportViewerPanel _summaryViewer = new() { Dock = DockStyle.Fill };
+    private readonly DateTimePicker _summaryFrom = new() { Format = DateTimePickerFormat.Short, Width = 120, Value = DateTime.Today.AddDays(-29) };
+    private readonly DateTimePicker _summaryTo = new() { Format = DateTimePickerFormat.Short, Width = 120, Value = DateTime.Today };
+    private readonly Button _summarySave = SecondaryButton("Save as…");
+    private readonly CheckBox _filterBugChecks = new() { Text = "Bugchecks", AutoSize = true, Checked = true, Padding = new Padding(0, 6, 10, 0) };
+    private readonly CheckBox _filterPower = new() { Text = "Power / shutdown", AutoSize = true, Checked = true, Padding = new Padding(0, 6, 10, 0) };
+    private readonly CheckBox _filterHardware = new() { Text = "Hardware errors", AutoSize = true, Checked = true, Padding = new Padding(0, 6, 10, 0) };
+    private readonly CheckBox _filterApplications = new() { Text = "Application crashes", AutoSize = true, Checked = true, Padding = new Padding(0, 6, 10, 0) };
+    private readonly CheckBox _filterCollected = new() { Text = "Only incidents with collected evidence", AutoSize = true, Padding = new Padding(0, 6, 10, 0) };
+    private readonly TextBox _filterCode = new() { Width = 90, PlaceholderText = "0x1E" };
+    private readonly TextBox _filterText = new() { Width = 150, PlaceholderText = "module / text" };
+    private readonly Label _summaryStatus = new() { Dock = DockStyle.Top, Height = 26, ForeColor = Color.FromArgb(75, 85, 99), Text = "Choose a date range and generate a summary of every incident it contains." };
+    private CrashSummary? _lastSummary;
     private readonly NumericUpDown _before = new() { Minimum = 1, Maximum = 1440, Value = 10, Width = 90 };
     private readonly NumericUpDown _after = new() { Minimum = 1, Maximum = 1440, Value = 5, Width = 90 };
     private readonly NumericUpDown _debuggerTimeout = new() { Minimum = 15, Maximum = 1800, Value = 180, Increment = 15, Width = 90 };
@@ -68,7 +81,7 @@ public sealed class MainForm : Form
         Text = "Crash Evidence Collector"; MinimumSize = new Size(1050, 680); Size = new Size(1240, 790); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9.5f); BackColor = Color.FromArgb(246, 248, 251);
         try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
         Controls.Add(_pages); Controls.Add(BuildNavigation()); Controls.Add(_modeBanner);
-        _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSettings());
+        _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSummaryReport()); _pages.TabPages.Add(BuildSettings());
         _timeline.Columns.Add("When", 180); _timeline.Columns.Add("Type", 150); _timeline.Columns.Add("Code / incident", 330); _timeline.Columns.Add("Plain-English meaning", 560); _timeline.Columns.Add("Source", 300);
         _timeline.SelectedIndexChanged += (_, _) => UpdateSelection(); _timeline.DoubleClick += (_, _) => UpdateSelection();
         _timelineRange.Items.AddRange(["Last 30 minutes", "Last hour", "Last 2 hours", "Last 3 hours", "Last 6 hours", "Last 12 hours", "Last 24 hours", "Last 3 days", "Last 7 days", "Last 30 days", "Custom hours"]);
@@ -92,7 +105,7 @@ public sealed class MainForm : Form
     private Control BuildNavigation()
     {
         var panel = new Panel { Dock = DockStyle.Left, Width = 210, BackColor = _nav, Padding = new Padding(14, 22, 14, 14) };
-        var buttons = new[] { ("Crash workspace", 0), ("Settings", 1) };
+        var buttons = new[] { ("Crash workspace", 0), ("Summary report", 1), ("Settings", 2) };
         foreach (var (text, page) in buttons.Reverse()) { var button = NavButton(text); button.Click += (_, _) => _pages.SelectedIndex = page; panel.Controls.Add(button); }
         // Added after the buttons so it docks above them. The logo carries the app
         // name and tagline; the old text label remains only as a fallback.
@@ -200,6 +213,81 @@ public sealed class MainForm : Form
         _headline.Height = 48;
         page.Controls.Add(root);
         return page;
+    }
+
+    private TabPage BuildSummaryReport()
+    {
+        var page = Page();
+        var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24) };
+        var viewerPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(2) };
+        viewerPanel.Controls.Add(_summaryViewer);
+
+        var controls = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 58, WrapContents = false, Padding = new Padding(0, 8, 0, 8) };
+        controls.Controls.Add(new Label { Text = "From", AutoSize = true, Padding = new Padding(0, 8, 6, 0) });
+        controls.Controls.Add(_summaryFrom);
+        controls.Controls.Add(new Label { Text = "To", AutoSize = true, Padding = new Padding(12, 8, 6, 0) });
+        controls.Controls.Add(_summaryTo);
+        foreach (var (text, days) in new[] { ("7 days", 7), ("30 days", 30), ("90 days", 90) })
+        {
+            var quick = SecondaryButton(text);
+            quick.Click += (_, _) => { _summaryFrom.Value = DateTime.Today.AddDays(-days + 1); _summaryTo.Value = DateTime.Today; };
+            controls.Controls.Add(quick);
+        }
+        var generate = PrimaryButton("Generate summary");
+        generate.Click += async (_, _) => await GenerateSummaryAsync();
+        controls.Controls.Add(generate);
+        _summarySave.Enabled = false; _summarySave.Click += (_, _) => SaveSummary();
+        controls.Controls.Add(_summarySave);
+
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 40, WrapContents = true };
+        filters.Controls.Add(new Label { Text = "Include:", AutoSize = true, Padding = new Padding(0, 6, 8, 0), Font = new Font("Segoe UI Semibold", 9f) });
+        filters.Controls.AddRange([_filterBugChecks, _filterPower, _filterHardware, _filterApplications, _filterCollected]);
+        filters.Controls.Add(new Label { Text = "Code:", AutoSize = true, Padding = new Padding(8, 6, 4, 0) });
+        filters.Controls.Add(_filterCode);
+        filters.Controls.Add(new Label { Text = "Contains:", AutoSize = true, Padding = new Padding(8, 6, 4, 0) });
+        filters.Controls.Add(_filterText);
+        var kernelOnly = SecondaryButton("Kernel crashes only");
+        kernelOnly.Click += (_, _) => { _filterBugChecks.Checked = _filterPower.Checked = _filterHardware.Checked = true; _filterApplications.Checked = false; _filterCollected.Checked = false; _filterCode.Clear(); _filterText.Clear(); };
+        filters.Controls.Add(kernelOnly);
+
+        root.Controls.Add(viewerPanel);
+        root.Controls.Add(filters);
+        root.Controls.Add(_summaryStatus);
+        root.Controls.Add(controls);
+        root.Controls.Add(new Label { Dock = DockStyle.Top, Height = 44, Text = "Summary report", Font = new Font("Segoe UI Semibold", 16), AutoSize = false });
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private async Task GenerateSummaryAsync()
+    {
+        var from = new DateTimeOffset(_summaryFrom.Value.Date, DateTimeOffset.Now.Offset);
+        var to = new DateTimeOffset(_summaryTo.Value.Date.AddDays(1).AddTicks(-1), DateTimeOffset.Now.Offset);
+        if (to < from) { MessageBox.Show(this, "The end date is before the start date.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        _summaryStatus.Text = "Reading retained reports…";
+        try
+        {
+            var filter = new CrashSummaryFilter(_filterBugChecks.Checked, _filterPower.Checked, _filterHardware.Checked, _filterApplications.Checked, _filterCollected.Checked,
+                string.IsNullOrWhiteSpace(_filterCode.Text) ? null : _filterCode.Text, string.IsNullOrWhiteSpace(_filterText.Text) ? null : _filterText.Text);
+            _lastSummary = await CrashSummaryBuilder.BuildAsync(_settings.OutputRoot, from, to, _incidents, MonitorLog.DefaultDirectory, CancellationToken.None, filter);
+            var path = Path.Combine(Path.GetTempPath(), $"cec-summary-{from:yyyyMMdd}-{to:yyyyMMdd}.html");
+            await File.WriteAllTextAsync(path, CrashSummaryWriter.BuildHtml(_lastSummary), new System.Text.UTF8Encoding(false));
+            _summaryViewer.ShowReportFile(path);
+            _summarySave.Enabled = true;
+            _summaryStatus.Text = $"{_lastSummary.Entries.Count} incident(s) between {from:d MMM yyyy} and {to:d MMM yyyy}; {_lastSummary.Collected} with collected evidence."
+                + (_lastSummary.ExcludedByFilter > 0 ? $" {_lastSummary.ExcludedByFilter} excluded by the filter (stated in the report)." : string.Empty);
+        }
+        catch (Exception ex) { _summaryStatus.Text = "Summary failed: " + ex.Message; await _log.WriteAsync("error", "Summary report failed", new { ex.Message }); }
+    }
+
+    private void SaveSummary()
+    {
+        if (_lastSummary is null) return;
+        using var dialog = new SaveFileDialog { Title = "Save crash summary", Filter = "HTML report (*.html)|*.html|Text report (*.txt)|*.txt", FileName = $"Crash-Summary-{_lastSummary.From:yyyyMMdd}-{_lastSummary.To:yyyyMMdd}.html", OverwritePrompt = true };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var text = dialog.FileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ? CrashSummaryWriter.BuildPlainText(_lastSummary) : CrashSummaryWriter.BuildHtml(_lastSummary);
+        File.WriteAllText(dialog.FileName, text, new System.Text.UTF8Encoding(false));
+        _summaryStatus.Text = $"Saved to {dialog.FileName}";
     }
 
     private TabPage BuildSettings()

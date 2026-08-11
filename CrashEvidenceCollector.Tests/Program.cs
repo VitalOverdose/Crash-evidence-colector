@@ -48,6 +48,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("A contradicted Event 6008 shutdown time is rejected", ContradictedShutdownTime)
     ,("Destroyed-stack buckets and cross-layer access violations are recognised", CorruptionSignals)
     ,("Application failures report their faulting module and exception", ApplicationFailureDetail)
+    ,("Date-range summary aggregates collected and uncollected incidents", CrashSummaryHandling)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -127,6 +128,68 @@ static Task WingetMetadataParsing()
     Assert(html.Contains("Online package metadata", StringComparison.Ordinal), "Web metadata section missing from the HTML report.");
     Assert(!html.Contains("Prog<script>", StringComparison.Ordinal), "Web metadata program names were not HTML encoded.");
     return Task.CompletedTask;
+}
+
+static async Task CrashSummaryHandling()
+{
+    var root = Path.Combine(Path.GetTempPath(), "CecSummary-" + Guid.NewGuid().ToString("N"));
+    var from = DateTimeOffset.Parse("2026-07-01T00:00:00+01:00");
+    var to = DateTimeOffset.Parse("2026-08-05T23:59:59+01:00");
+    try
+    {
+        async Task WriteReport(string folder, string id, string when, string code, string bucket)
+        {
+            var directory = Path.Combine(root, folder); Directory.CreateDirectory(directory);
+            var report = new EvidenceReport
+            {
+                Incident = new(id, DateTimeOffset.Parse(when), IncidentKind.BugCheck, "Bugcheck " + code, "test", code),
+                CrashTimestamp = new() { SelectedCrashTime = DateTimeOffset.Parse(when) }
+            };
+            report.DumpAnalyses.Add(new() { Analyze = new() { BugCheckCode = code, FailureBucketId = bucket, ModuleName = "nt" }, Association = new(DumpAssociationStatus.ExactBugCheckMatch, true, 1, TimeSpan.Zero, "primary") });
+            await File.WriteAllTextAsync(Path.Combine(directory, "report.json"), JsonSerializer.Serialize(report, JsonDefaults.Indented));
+        }
+        // Same code recorded in two widths: grouping must treat them as one.
+        await WriteReport("run-1", "a", "2026-07-20T10:00:00+01:00", "0x1E", "ZEROED_STACK_AV");
+        await WriteReport("run-2", "b", "2026-08-04T01:31:00+01:00", "0x0000001E", "ZEROED_STACK_AV");
+        await WriteReport("run-3", "c", "2026-06-01T10:00:00+01:00", "0x50", "OUT_OF_RANGE");   // before the range
+        var detected = new[]
+        {
+            new Incident("a", DateTimeOffset.Parse("2026-07-20T10:00:00+01:00"), IncidentKind.BugCheck, "already collected", "t", "0x1E"),
+            new Incident("d", DateTimeOffset.Parse("2026-07-25T22:00:00+01:00"), IncidentKind.PowerLossOrFreeze, "never collected", "t")
+        };
+
+        var summary = await CrashSummaryBuilder.BuildAsync(root, from, to, detected, null, CancellationToken.None);
+        Assert(summary.Entries.Count == 3, $"Expected 2 collected + 1 uncollected in range, got {summary.Entries.Count}.");
+        Assert(summary.Entries.Count(entry => entry.Collected) == 2 && summary.Entries.Count(entry => !entry.Collected) == 1, "Collected/uncollected split is wrong.");
+        Assert(summary.Entries.All(entry => entry.Timestamp >= from && entry.Timestamp <= to), "An out-of-range report leaked into the summary.");
+        Assert(summary.Entries[0].Timestamp > summary.Entries[^1].Timestamp, "Entries must be newest first.");
+        Assert(summary.BugChecks == 2 && summary.PowerOrShutdown == 1, "Type totals are wrong.");
+
+        var patterns = CrashSummaryWriter.DescribePatterns(summary);
+        Assert(summary.Entries.Count(entry => entry.BugCheckCode == "0x1E") == 2, "Bugcheck codes of differing widths were not normalised to one form.");
+        Assert(patterns.Any(line => line.Contains("0x1E", StringComparison.Ordinal) && line.Contains("2 times", StringComparison.Ordinal)), "The repeated bugcheck code was not reported.");
+        Assert(patterns.Any(line => line.Contains("ZEROED_STACK_AV", StringComparison.Ordinal)), "The repeated failure bucket was not reported.");
+        Assert(patterns.Any(line => line.Contains("no collected evidence", StringComparison.Ordinal)), "Uncollected incidents must be called out.");
+
+        var html = CrashSummaryWriter.BuildHtml(summary);
+        Assert(html.Contains("Crash Summary Report", StringComparison.Ordinal) && html.Contains("ZEROED_STACK_AV", StringComparison.Ordinal), "The HTML summary is missing content.");
+        Assert(CrashSummaryWriter.BuildPlainText(summary).Contains("CRASH SUMMARY REPORT", StringComparison.Ordinal), "The text summary is missing its header.");
+
+        // Filtering must remove rows and disclose that it did.
+        var kernelOnly = await CrashSummaryBuilder.BuildAsync(root, from, to, detected, null, CancellationToken.None, CrashSummaryFilter.KernelOnly);
+        Assert(kernelOnly.Entries.All(entry => entry.Kind != IncidentKind.ApplicationCrash), "The kernel-only filter kept an application crash.");
+        var collectedOnly = await CrashSummaryBuilder.BuildAsync(root, from, to, detected, null, CancellationToken.None, new CrashSummaryFilter(OnlyWithCollectedEvidence: true));
+        Assert(collectedOnly.Entries.Count == 2 && collectedOnly.ExcludedByFilter == 1, $"Collected-only filter kept {collectedOnly.Entries.Count} and excluded {collectedOnly.ExcludedByFilter}.");
+        Assert(CrashSummaryWriter.BuildPlainText(collectedOnly).Contains("not listed because of the filter", StringComparison.Ordinal), "A filtered text summary must disclose what it excluded.");
+        Assert(CrashSummaryWriter.BuildHtml(collectedOnly).Contains("Filter:", StringComparison.Ordinal), "A filtered HTML summary must state its filter.");
+        var byCode = await CrashSummaryBuilder.BuildAsync(root, from, to, detected, null, CancellationToken.None, new CrashSummaryFilter(BugCheckCode: "0x0000001e"));
+        Assert(byCode.Entries.Count == 2 && byCode.Entries.All(entry => entry.BugCheckCode == "0x1E"), "Filtering by code must normalise widths and case.");
+        Assert(CrashSummaryWriter.BuildPlainText(summary).Contains("No filter", StringComparison.Ordinal), "An unfiltered summary must say so.");
+
+        var empty = await CrashSummaryBuilder.BuildAsync(root, DateTimeOffset.Parse("2020-01-01T00:00:00+00:00"), DateTimeOffset.Parse("2020-02-01T00:00:00+00:00"), [], null, CancellationToken.None);
+        Assert(empty.Entries.Count == 0 && CrashSummaryWriter.BuildPlainText(empty).Contains("No incidents", StringComparison.Ordinal), "An empty range must say so.");
+    }
+    finally { try { Directory.Delete(root, true); } catch { } }
 }
 
 static Task ApplicationFailureDetail()
