@@ -49,6 +49,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("Destroyed-stack buckets and cross-layer access violations are recognised", CorruptionSignals)
     ,("Application failures report their faulting module and exception", ApplicationFailureDetail)
     ,("Date-range summary aggregates collected and uncollected incidents", CrashSummaryHandling)
+    ,("Web search treats evidence text as a query, not an address", WebSearchTargets)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -127,6 +128,22 @@ static Task WingetMetadataParsing()
     var html = ReportWriter.BuildHtml(report);
     Assert(html.Contains("Online package metadata", StringComparison.Ordinal), "Web metadata section missing from the HTML report.");
     Assert(!html.Contains("Prog<script>", StringComparison.Ordinal), "Web metadata program names were not HTML encoded.");
+    return Task.CompletedTask;
+}
+
+static Task WebSearchTargets()
+{
+    Assert(WebSearchTarget.Build("https://learn.microsoft.com/x") == "https://learn.microsoft.com/x", "An explicit URL must pass through unchanged.");
+    Assert(WebSearchTarget.Build("learn.microsoft.com/windows") == "https://learn.microsoft.com/windows", "A bare host must become an https address.");
+    // Evidence strings look dotted but are not addresses.
+    foreach (var evidence in new[] { "nt!KeBugCheckEx", "0x1E_C0000096_nt!HalpHvTimerStop", "ZEROED_STACK_AV", "KERNELBASE.dll", "MEMORY_MANAGEMENT 0x1A" })
+        Assert(WebSearchTarget.Build(evidence).StartsWith(WebSearchTarget.SearchHome + "/search?q=", StringComparison.Ordinal), $"'{evidence}' must be searched, not opened as an address.");
+    Assert(WebSearchTarget.Build("KERNELBASE.dll exception 0xe0000008").Contains("0xe0000008", StringComparison.Ordinal), "The query must survive escaping.");
+    var longQuery = WebSearchTarget.Build(new string('a', 900));
+    Assert(longQuery.Length < 400, "An over-long selection must be trimmed before searching.");
+    Assert(WebSearchTarget.Build("  ") == WebSearchTarget.SearchHome, "Empty input must fall back to the search home page.");
+    var multiline = WebSearchTarget.Build("line one" + Environment.NewLine + "line two");
+    Assert(!multiline.Any(char.IsControl), "Newlines from a multi-line selection must be flattened.");
     return Task.CompletedTask;
 }
 
@@ -790,7 +807,8 @@ static Task CrashMetricsHandling()
     Assert(snapshot.IncidentsInRange == 3 && snapshot.BugChecksInRange == 1, "In-range incident totals are wrong.");
     Assert(snapshot.NewIncidentsInRange == 1 && snapshot.RetainedIncidentCount == 2, "Duplicate retained reports for one incident were not collapsed.");
     Assert(snapshot.Trend.Sum(point => point.Value) == 3, "Trend buckets must count every visible incident exactly once.");
-    Assert(snapshot.DailyIncidentMix.Count == 14 && snapshot.DailyIncidentMix.Sum(day => day.Total) == 3, "Daily stacked series does not cover/count the 14-day history.");
+    Assert(snapshot.DailyIncidentMix.Count == 30 && snapshot.DailyIncidentMix.Sum(day => day.Total) == 3, "Daily stacked series does not cover/count the 30-day history.");
+    Assert(snapshot.BugCheckFreeStreak == TimeSpan.FromHours(1), "The BSOD-free streak was not measured from the most recent unique bugcheck.");
     Assert(snapshot.IncidentTypes.Single(point => point.Label == "Bugchecks").Value == 1 && snapshot.IncidentTypes.Single(point => point.Label == "Applications").Value == 1, "Incident-type split is wrong.");
     Assert(snapshot.TopBugChecks.Count == 2 && snapshot.TopBugChecks.All(item => item.Value == 1), "Repeated-code metric grouped distinct bugchecks incorrectly.");
     return Task.CompletedTask;

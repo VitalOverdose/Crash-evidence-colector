@@ -13,6 +13,7 @@ public sealed record CrashMetricsSnapshot(
     int BugChecksInRange,
     int NewIncidentsInRange,
     int RetainedIncidentCount,
+    TimeSpan? BugCheckFreeStreak,
     IReadOnlyList<CrashMetricPoint> Trend,
     IReadOnlyList<CrashDailyMetric> DailyIncidentMix,
     IReadOnlyList<CrashMetricPoint> IncidentTypes,
@@ -65,12 +66,12 @@ public static class CrashMetricsCalculator
             new CrashMetricPoint("Applications", visible.Count(item => item.Kind == IncidentKind.ApplicationCrash))
         };
 
-        // The daily incident-type chart deliberately keeps a stable 14-day
+        // The daily incident-type chart deliberately keeps a stable 30-day
         // context even when the timeline is narrowed to the last hour.
         var history = dailyHistory ?? visible;
         var localEndDay = rangeEnd.ToLocalTime().Date;
-        var daily = new List<CrashDailyMetric>(14);
-        for (var offset = 13; offset >= 0; offset--)
+        var daily = new List<CrashDailyMetric>(30);
+        for (var offset = 29; offset >= 0; offset--)
         {
             var localDay = localEndDay.AddDays(-offset);
             var dayStart = new DateTimeOffset(localDay, TimeZoneInfo.Local.GetUtcOffset(localDay));
@@ -103,11 +104,25 @@ public static class CrashMetricsCalculator
             .Select(group => new CrashMetricPoint(group.Key, group.Count()))
             .ToList();
 
+        // Combine live and retained history by incident ID before calculating
+        // the streak. This avoids counting the same collected crash twice.
+        var latestBugCheck = history
+            .Concat(retained)
+            .Where(item => item.Kind == IncidentKind.BugCheck && item.Timestamp <= rangeEnd)
+            .GroupBy(item => item.Id, StringComparer.Ordinal)
+            .Select(group => group.Max(item => item.Timestamp))
+            .DefaultIfEmpty()
+            .Max();
+        TimeSpan? bugCheckFreeStreak = latestBugCheck == default
+            ? null
+            : rangeEnd - latestBugCheck;
+
         return new(
             visible.Count,
             visible.Count(item => item.Kind == IncidentKind.BugCheck),
             newIncidentIds is null ? 0 : visible.Count(item => newIncidentIds.Contains(item.Id)),
             retained.Count,
+            bugCheckFreeStreak,
             trend,
             daily,
             types,

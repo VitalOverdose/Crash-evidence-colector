@@ -15,6 +15,7 @@ internal sealed class IncidentMetricsView : UserControl
     private readonly Label _bugchecks = ValueLabel();
     private readonly Label _newIncidents = ValueLabel();
     private readonly Label _retained = ValueLabel();
+    private readonly Label _streak = ValueLabel();
     private readonly DailyIncidentChart _daily = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly IncidentTypeDonut _types = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly TopBugCheckChart _codes = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
@@ -29,13 +30,15 @@ internal sealed class IncidentMetricsView : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Margin = Padding.Empty };
-        for (var index = 0; index < 4; index++) cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1, Margin = Padding.Empty };
+        for (var index = 0; index < 5; index++) cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
         cards.Controls.Add(Card("Incidents in range", _incidents), 0, 0);
         cards.Controls.Add(Card("Bugchecks", _bugchecks), 1, 0);
         cards.Controls.Add(Card("New since last run", _newIncidents), 2, 0);
         cards.Controls.Add(Card("Retained reports", _retained), 3, 0);
+        cards.Controls.Add(Card("BSOD-free streak", _streak), 4, 0);
 
+        _daily.DaySelected += day => DaySelected?.Invoke(day);
         var charts = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
         charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
         charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
@@ -51,6 +54,9 @@ internal sealed class IncidentMetricsView : UserControl
         Controls.Add(root);
     }
 
+    /// <summary>Raised when a day is clicked in the daily chart.</summary>
+    public event Action<CrashDailyMetric>? DaySelected;
+
     public void SetMetrics(CrashMetricsSnapshot snapshot, string rangeLabel)
     {
         _incidents.Text = snapshot.IncidentsInRange.ToString("N0");
@@ -58,9 +64,17 @@ internal sealed class IncidentMetricsView : UserControl
         _bugchecks.Text = snapshot.BugChecksInRange.ToString("N0");
         _newIncidents.Text = snapshot.NewIncidentsInRange.ToString("N0");
         _retained.Text = snapshot.RetainedIncidentCount.ToString("N0");
+        _streak.Text = FormatStreak(snapshot.BugCheckFreeStreak);
         _daily.SetData(snapshot.DailyIncidentMix);
         _types.SetData(snapshot.IncidentTypes, rangeLabel);
         _codes.SetData(snapshot.TopBugChecks);
+    }
+
+    private static string FormatStreak(TimeSpan? streak)
+    {
+        if (streak is null) return "No BSOD";
+        if (streak.Value.TotalDays >= 1) return $"{(int)streak.Value.TotalDays}d {streak.Value.Hours}h";
+        return $"{(int)streak.Value.TotalHours}h {streak.Value.Minutes}m";
     }
 
     private static Control Card(string title, Label value)
@@ -124,15 +138,29 @@ internal abstract class MetricsChart : Control
 internal sealed class DailyIncidentChart : MetricsChart
 {
     private IReadOnlyList<CrashDailyMetric> _data = [];
+    // Bar hit areas, captured while painting so a click can resolve to its day.
+    private readonly List<(RectangleF Area, CrashDailyMetric Day)> _bars = [];
+
+    /// <summary>Raised when a day's column is clicked, so the caller can show what happened.</summary>
+    public event Action<CrashDailyMetric>? DaySelected;
+
+    public DailyIncidentChart() => Cursor = Cursors.Hand;
 
     public void SetData(IReadOnlyList<CrashDailyMetric> data) { _data = data; Invalidate(); }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+        foreach (var (area, day) in _bars)
+            if (area.Contains(e.Location)) { DaySelected?.Invoke(day); return; }
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         var bounds = ClientRectangle;
         bounds.Inflate(-14, -10);
-        Title(e.Graphics, "Daily incident types · last 14 days", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
+        Title(e.Graphics, $"Daily incident types - last {_data.Count} days (click a day)", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
         DrawLegend(e.Graphics, new Rectangle(bounds.X, bounds.Y + 23, bounds.Width, 20));
         var plot = new Rectangle(bounds.X + 28, bounds.Y + 50, Math.Max(10, bounds.Width - 34), Math.Max(10, bounds.Height - 76));
         if (_data.Count == 0) { Empty(e.Graphics, plot, "No daily incident history is available."); return; }
@@ -148,10 +176,12 @@ internal sealed class DailyIncidentChart : MetricsChart
 
         var slot = plot.Width / (float)_data.Count;
         var barWidth = Math.Max(4f, slot * .64f);
+        _bars.Clear();
         for (var index = 0; index < _data.Count; index++)
         {
             var item = _data[index];
             var x = plot.Left + slot * index + (slot - barWidth) / 2;
+            _bars.Add((new RectangleF(plot.Left + slot * index, plot.Top, slot, plot.Height), item));
             var bottom = (float)plot.Bottom;
             var values = new[] { item.BugChecks, item.PowerOrShutdown, item.Hardware, item.Applications };
             for (var series = 0; series < values.Length; series++)
@@ -162,7 +192,8 @@ internal sealed class DailyIncidentChart : MetricsChart
                 using var brush = new SolidBrush(SeriesColors[series]);
                 e.Graphics.FillRectangle(brush, x, bottom, barWidth, height);
             }
-            if (index % 2 == 0 || index == _data.Count - 1)
+            var labelEvery = Math.Max(1, _data.Count / 7);
+            if (index % labelEvery == 0 || index == _data.Count - 1)
                 TextRenderer.DrawText(e.Graphics, item.Label, ChartTinyFont, new Rectangle((int)(x - slot / 2), plot.Bottom + 3, (int)(slot * 2), 18), Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
         }
     }

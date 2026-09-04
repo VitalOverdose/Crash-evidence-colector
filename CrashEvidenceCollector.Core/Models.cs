@@ -117,7 +117,7 @@ public sealed class CollectionOptions
     public bool RedactAccountName { get; set; } = true;
     public bool AnalyzeCrashDumps { get; set; } = true;
     public bool LookUpInstalledProgramsOnline { get; set; } = true;
-    public bool StartMonitoringOnLaunch { get; set; }
+    public bool StartMonitoringOnLaunch { get; set; } = true;
     public bool AlwaysRunElevated { get; set; }
     public int DebuggerTimeoutSeconds { get; set; } = 180;
     public string OutputRoot { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Crash Evidence Collector");
