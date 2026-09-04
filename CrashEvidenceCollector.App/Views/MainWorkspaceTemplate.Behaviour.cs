@@ -32,6 +32,14 @@ public partial class MainWorkspaceTemplate
     public TabContentControl TabContent => tabContentControl1;
     public FlowLayoutPanel TimelineFilters => filterRow;
 
+    /// <summary>
+    /// The left pane itself. Its designer children dock in this order, bottom-up
+    /// by child index: the list fills, the filter row and headline sit above it.
+    /// Anything inserted here must set its own child index to land in the right
+    /// place rather than simply appending.
+    /// </summary>
+    public Panel TimelinePanel => timelinePanel;
+
     public VirtualModernButton CollectButton => bthCollectEvidence;
     public VirtualModernButton CancelButton => btnCancel;
     public VirtualModernButton PastHistoryButton => btnPastHistory;

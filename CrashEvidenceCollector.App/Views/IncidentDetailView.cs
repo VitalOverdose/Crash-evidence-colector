@@ -6,12 +6,12 @@ namespace CrashEvidenceCollector.App.Views;
 internal sealed class IncidentDetailView : UserControl
 {
     private readonly Panel _accent = new() { Dock = DockStyle.Left, Width = 5 };
-    private readonly Label _eyebrow = new() { Dock = DockStyle.Top, Height = 26, Font = new Font("Segoe UI Semibold", 8.5f), ForeColor = UiTheme.Accent };
-    private readonly Label _title = new() { Dock = DockStyle.Top, Height = 42, Font = new Font("Segoe UI Semibold", 19f), ForeColor = UiTheme.Ink, AutoEllipsis = true };
-    private readonly Label _code = new() { Dock = DockStyle.Top, Height = 30, Font = new Font("Cascadia Mono", 10f, FontStyle.Bold), ForeColor = UiTheme.Danger, AutoEllipsis = true };
-    private readonly Label _meaning = new() { Dock = DockStyle.Top, Height = 82, Font = new Font("Segoe UI", 10.5f), ForeColor = UiTheme.Ink };
-    private readonly Label _metadata = new() { Dock = DockStyle.Top, Height = 94, Font = new Font("Segoe UI", 9.2f), ForeColor = UiTheme.Muted };
-    private readonly Label _related = new() { Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI Semibold", 9f), ForeColor = UiTheme.Cyan };
+    private readonly Label _eyebrow = new() { Dock = DockStyle.Top, Height = 22, Font = new Font("Segoe UI Semibold", 8.5f), ForeColor = UiTheme.Accent };
+    private readonly Label _title = new() { Dock = DockStyle.Top, Height = 32, Font = new Font("Segoe UI Semibold", 14.5f), ForeColor = UiTheme.Ink, AutoEllipsis = true };
+    private readonly Label _code = new() { Dock = DockStyle.Top, Height = 44, Font = new Font("Cascadia Mono", 10f, FontStyle.Bold), ForeColor = UiTheme.Danger, AutoEllipsis = true };
+    private readonly Label _meaning = new() { Dock = DockStyle.Top, Height = 62, Font = new Font("Segoe UI", 9.5f), ForeColor = UiTheme.Ink };
+    private readonly Label _metadata = new() { Dock = DockStyle.Top, Height = 76, Font = new Font("Segoe UI", 8.8f), ForeColor = UiTheme.Muted };
+    private readonly Label _related = new() { Dock = DockStyle.Top, Height = 26, Font = new Font("Segoe UI Semibold", 9f), ForeColor = UiTheme.Cyan };
     private readonly FlowLayoutPanel _actions = new() { Dock = DockStyle.Top, Height = 44, WrapContents = false, Padding = new Padding(0, 5, 0, 0) };
     private readonly Button _collect = UiTheme.ActionButton("Collect focused evidence", true);
     private readonly Button _compare = UiTheme.ActionButton("Add to comparison");
@@ -21,19 +21,20 @@ internal sealed class IncidentDetailView : UserControl
 
     public IncidentDetailView()
     {
-        Dock = DockStyle.Fill;
+        // The host decides where this sits; it lives above the timeline in the
+        // left pane, so it is sized for a narrow column rather than a full tab.
         BackColor = UiTheme.Surface;
-        Padding = new Padding(24, 22, 24, 16);
+        Padding = new Padding(16, 12, 16, 8);
 
         _actions.Controls.AddRange([_collect, _compare, _search, _copy]);
-        var body = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Padding = new Padding(20, 0, 8, 0) };
+        var body = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Padding = new Padding(14, 0, 6, 0) };
         body.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             Text = "Raw codes are always retained beside these interpretations. Conclusions remain evidence-weighted and never treat a crash marker as proof of root cause.",
             ForeColor = UiTheme.Faint,
-            Font = new Font("Segoe UI", 8.5f),
-            Padding = new Padding(0, 12, 0, 0)
+            Font = new Font("Segoe UI", 8f),
+            Padding = new Padding(0, 8, 0, 0)
         });
         body.Controls.Add(_actions);
         body.Controls.Add(_related);
@@ -49,7 +50,7 @@ internal sealed class IncidentDetailView : UserControl
         _compare.Click += (_, _) => { if (_incident is not null) CompareRequested?.Invoke(_incident); };
         _search.Click += (_, _) => { if (_incident is not null) SearchRequested?.Invoke(SearchText(_incident)); };
         _copy.Click += (_, _) => CopyCurrent();
-        ShowEmpty("Select an incident from the timeline to open its analyst briefing.");
+        ShowEmpty("Select an incident below to see what it means.");
     }
 
     public event Action<Incident>? CollectRequested;
@@ -91,7 +92,7 @@ internal sealed class IncidentDetailView : UserControl
         _title.Text = "No incident selected";
         _code.Visible = false;
         _meaning.Text = message;
-        _metadata.Text = "Choose a time range or search the timeline to find a crash, shutdown, hardware event, or application failure.";
+        _metadata.Text = "Choose a time range or search to find a crash, shutdown, hardware event, or application failure.";
         _related.Text = string.Empty;
         _collect.Enabled = _compare.Enabled = _search.Enabled = _copy.Enabled = false;
     }

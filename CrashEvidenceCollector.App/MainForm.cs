@@ -48,9 +48,14 @@ public sealed class MainForm : Form
     private readonly Views.HelpView _helpView = new();
     private TabWorkspaceController _tabs = null!;
     /// <summary>Index of the readable report pane in the fixed tab order.</summary>
-    private const int ReportTabIndex = 6;
-    /// <summary>Index of the selected-incident pane in the fixed tab order.</summary>
-    private const int SelectedIncidentTabIndex = 1;
+    private const int ReportTabIndex = 5;
+    /// <summary>Index of the comparison board in the fixed tab order.</summary>
+    private const int CompareTabIndex = 1;
+    /// <summary>
+    /// Lets the user trade briefing height for timeline rows. The briefing sits
+    /// between the filters and the list, so neither has to be a fixed compromise.
+    /// </summary>
+    private readonly Splitter _briefingSplitter = new() { Dock = DockStyle.Top, Height = 6, MinExtra = 180, MinSize = 150, BackColor = UiTheme.Border };
     private readonly IncidentMetricsView _metrics = new();
     private readonly LiveMonitorView _liveMonitor = new();
     /// <summary>
@@ -199,9 +204,19 @@ public sealed class MainForm : Form
         _workspace.TimelineFilters.Controls.Add(_timelineSearch);
         _workspace.TimelineFilters.Controls.Add(_clearTimelineSearch);
 
+        // The briefing belongs beside the evidence it describes, not behind a tab.
+        // Docking order in this panel runs bottom-up by child index, so the two new
+        // controls are placed explicitly: headline, filters, briefing, splitter, list.
+        _incidentView.Dock = DockStyle.Top;
+        _incidentView.Height = 330;
+        var timelinePane = _workspace.TimelinePanel;
+        timelinePane.Controls.Add(_incidentView);
+        timelinePane.Controls.Add(_briefingSplitter);
+        timelinePane.Controls.SetChildIndex(_briefingSplitter, 1);
+        timelinePane.Controls.SetChildIndex(_incidentView, 2);
+
         _tabs = new TabWorkspaceController(_workspace.TabHeaders, _workspace.TabContent, _workspace);
         _tabs.AddFixedTab("Metrics & trends", _metrics);
-        _tabs.AddFixedTab("Incident briefing", _incidentView);
         _tabs.AddFixedTab("Compare", _comparisonView);
         _tabs.AddFixedTab("Live monitor", _liveMonitor);
         _tabs.AddFixedTab("Evidence status", _evidenceView);
@@ -212,7 +227,7 @@ public sealed class MainForm : Form
         // Clicking a day in the chart answers "which applications, and why".
         _metrics.DaySelected += ShowDayDetail;
         _incidentView.CollectRequested += async incident => { SelectIncidentInTimeline(incident); await CollectAsync(); };
-        _incidentView.CompareRequested += incident => { _comparisonView.Add(incident); _tabs.SelectTab(2); };
+        _incidentView.CompareRequested += incident => { _comparisonView.Add(incident); _tabs.SelectTab(CompareTabIndex); };
         _incidentView.SearchRequested += text => _tabs.Search(text, true);
         _comparisonView.IncidentRequested += SelectIncidentInTimeline;
         BuildTimelineContextMenu();
@@ -244,12 +259,12 @@ public sealed class MainForm : Form
     private void BuildTimelineContextMenu()
     {
         var menu = new ContextMenuStrip { Font = Font };
-        menu.Items.Add("Open incident briefing", null, (_, _) => _tabs.SelectTab(SelectedIncidentTabIndex));
+        // No "open briefing" item: the briefing is now always on screen above this list.
         menu.Items.Add("Add to comparison board", null, (_, _) =>
         {
             if (_timeline.SelectedItems.Count == 0) return;
             _comparisonView.Add((Incident)_timeline.SelectedItems[0].Tag!);
-            _tabs.SelectTab(2);
+            _tabs.SelectTab(CompareTabIndex);
         });
         menu.Items.Add("Research code / incident", null, (_, _) =>
         {
@@ -294,7 +309,7 @@ public sealed class MainForm : Form
         row.Selected = true;
         row.EnsureVisible();
         _timeline.Focus();
-        _tabs.SelectTab(SelectedIncidentTabIndex);
+        // Selecting the row updates the briefing in place; there is no tab to switch to.
     }
 
     private void NavigateFromAddressBox()
