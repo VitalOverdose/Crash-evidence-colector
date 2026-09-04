@@ -811,6 +811,14 @@ static Task CrashMetricsHandling()
     Assert(snapshot.BugCheckFreeStreak == TimeSpan.FromHours(1), "The BSOD-free streak was not measured from the most recent unique bugcheck.");
     Assert(snapshot.IncidentTypes.Single(point => point.Label == "Bugchecks").Value == 1 && snapshot.IncidentTypes.Single(point => point.Label == "Applications").Value == 1, "Incident-type split is wrong.");
     Assert(snapshot.TopBugChecks.Count == 2 && snapshot.TopBugChecks.All(item => item.Value == 1), "Repeated-code metric grouped distinct bugchecks incorrectly.");
+    var repeatApps = new[]
+    {
+        new Incident("app-a", now.AddHours(-2), IncidentKind.ApplicationCrash, "Application crash — render.exe", "test"),
+        new Incident("app-b", now.AddHours(-1), IncidentKind.ApplicationCrash, "Application crash — render.exe", "test"),
+        new Incident("app-c", now.AddMinutes(-30), IncidentKind.ApplicationCrash, "Application crash — editor.exe", "test")
+    };
+    var repeatSnapshot = CrashMetricsCalculator.Build(repeatApps, [repeatApps[0]], now.AddDays(-1), now, dailyHistory: repeatApps);
+    Assert(repeatSnapshot.TopApplications[0] == new CrashMetricPoint("render.exe", 2), "Repeated application crashes were not promoted as the dominant pattern.");
     return Task.CompletedTask;
 }
 

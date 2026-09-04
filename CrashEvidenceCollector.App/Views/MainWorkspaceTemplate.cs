@@ -15,7 +15,11 @@ namespace CrashEvidenceCollector.App.Views;
 /// </summary>
 public partial class MainWorkspaceTemplate : UserControl
 {
-    public MainWorkspaceTemplate() => InitializeComponent();
+    public MainWorkspaceTemplate()
+    {
+        InitializeComponent();
+        ApplyInvestigationTheme();
+    }
 
     /// <summary>The design surface that receives the tab shell.</summary>
     public Panel RightHost => rightHost;

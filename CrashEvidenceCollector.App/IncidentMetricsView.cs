@@ -19,6 +19,9 @@ internal sealed class IncidentMetricsView : UserControl
     private readonly DailyIncidentChart _daily = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly IncidentTypeDonut _types = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly TopBugCheckChart _codes = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
+    private readonly TopApplicationChart _applications = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
+    private readonly Label _patternTitle = new() { Dock = DockStyle.Top, Height = 25, Font = new Font("Segoe UI Semibold", 11f), ForeColor = UiTheme.Ink };
+    private readonly Label _patternDetail = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f), ForeColor = UiTheme.Muted, AutoEllipsis = true };
 
     public IncidentMetricsView()
     {
@@ -26,8 +29,9 @@ internal sealed class IncidentMetricsView : UserControl
         BackColor = Color.FromArgb(246, 248, 251);
         Padding = new Padding(6);
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = BackColor };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = BackColor };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1, Margin = Padding.Empty };
@@ -39,18 +43,25 @@ internal sealed class IncidentMetricsView : UserControl
         cards.Controls.Add(Card("BSOD-free streak", _streak), 4, 0);
 
         _daily.DaySelected += day => DaySelected?.Invoke(day);
-        var charts = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
-        charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
-        charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+        var signal = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.AccentSoft, Margin = new Padding(5), Padding = new Padding(14, 9, 14, 7) };
+        signal.Controls.Add(_patternDetail);
+        signal.Controls.Add(_patternTitle);
+
+        var charts = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, Margin = Padding.Empty };
+        charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
+        charts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
         charts.RowStyles.Add(new RowStyle(SizeType.Percent, 57));
         charts.RowStyles.Add(new RowStyle(SizeType.Percent, 43));
         charts.Controls.Add(_daily, 0, 0);
-        charts.SetColumnSpan(_daily, 2);
+        charts.SetColumnSpan(_daily, 3);
         charts.Controls.Add(_types, 0, 1);
-        charts.Controls.Add(_codes, 1, 1);
+        charts.Controls.Add(_applications, 1, 1);
+        charts.Controls.Add(_codes, 2, 1);
 
         root.Controls.Add(cards, 0, 0);
-        root.Controls.Add(charts, 0, 1);
+        root.Controls.Add(signal, 0, 1);
+        root.Controls.Add(charts, 0, 2);
         Controls.Add(root);
     }
 
@@ -68,6 +79,20 @@ internal sealed class IncidentMetricsView : UserControl
         _daily.SetData(snapshot.DailyIncidentMix);
         _types.SetData(snapshot.IncidentTypes, rangeLabel);
         _codes.SetData(snapshot.TopBugChecks);
+        _applications.SetData(snapshot.TopApplications);
+        var offender = snapshot.TopApplications.FirstOrDefault();
+        if (offender is { Value: > 1 })
+        {
+            _patternTitle.ForeColor = UiTheme.Danger;
+            _patternTitle.Text = $"REPEAT FAILURE PATTERN  \u2022  {offender.Label}";
+            _patternDetail.Text = $"{offender.Value:N0} crashes in retained and visible history. This recurrence is a lead worth investigating; it is not, by itself, proof of the underlying cause.";
+        }
+        else
+        {
+            _patternTitle.ForeColor = UiTheme.Success;
+            _patternTitle.Text = "NO DOMINANT APPLICATION FAILURE PATTERN";
+            _patternDetail.Text = "No application currently repeats enough to stand out from the rest of the incident history.";
+        }
     }
 
     private static string FormatStreak(TimeSpan? streak)
@@ -94,6 +119,34 @@ internal sealed class IncidentMetricsView : UserControl
         ForeColor = Navy,
         Font = new Font("Segoe UI Semibold", 28)
     };
+}
+
+internal sealed class TopApplicationChart : MetricsChart
+{
+    private IReadOnlyList<CrashMetricPoint> _data = [];
+    public void SetData(IReadOnlyList<CrashMetricPoint> data) { _data = data; Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var bounds = ClientRectangle; bounds.Inflate(-12, -9);
+        Title(e.Graphics, "Repeat application failures", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
+        var chart = new Rectangle(bounds.X, bounds.Y + 28, bounds.Width, bounds.Height - 32);
+        if (_data.Count == 0) { Empty(e.Graphics, chart, "No application crashes in history."); return; }
+        var maximum = Math.Max(1, _data.Max(item => item.Value));
+        var rowHeight = Math.Max(18, chart.Height / Math.Max(1, _data.Count));
+        var labelWidth = Math.Clamp(chart.Width * 52 / 100, 80, 210);
+        for (var index = 0; index < _data.Count; index++)
+        {
+            var item = _data[index]; var y = chart.Y + index * rowHeight;
+            var emphasis = index == 0 && item.Value > 1 ? UiTheme.Danger : Navy;
+            TextRenderer.DrawText(e.Graphics, item.Label, ChartTextFont, new Rectangle(chart.X, y, labelWidth - 5, rowHeight), emphasis, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 28) * item.Value / maximum), Math.Max(7, rowHeight - 10));
+            using var brush = new SolidBrush(index == 0 && item.Value > 1 ? UiTheme.Danger : UiTheme.Accent);
+            e.Graphics.FillRectangle(brush, bar);
+            TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 24, rowHeight), Muted, TextFormatFlags.VerticalCenter);
+        }
+    }
 }
 
 internal abstract class MetricsChart : Control

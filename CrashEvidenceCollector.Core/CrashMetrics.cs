@@ -17,7 +17,8 @@ public sealed record CrashMetricsSnapshot(
     IReadOnlyList<CrashMetricPoint> Trend,
     IReadOnlyList<CrashDailyMetric> DailyIncidentMix,
     IReadOnlyList<CrashMetricPoint> IncidentTypes,
-    IReadOnlyList<CrashMetricPoint> TopBugChecks);
+    IReadOnlyList<CrashMetricPoint> TopBugChecks,
+    IReadOnlyList<CrashMetricPoint> TopApplications);
 
 /// <summary>
 /// Produces small, deterministic chart datasets from the live event timeline
@@ -104,6 +105,18 @@ public static class CrashMetricsCalculator
             .Select(group => new CrashMetricPoint(group.Key, group.Count()))
             .ToList();
 
+        var topApplications = history
+            .Concat(retained)
+            .GroupBy(item => item.Id, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(item => item.Timestamp).First())
+            .Where(item => item.Kind == IncidentKind.ApplicationCrash)
+            .GroupBy(ApplicationName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .Select(group => new CrashMetricPoint(group.Key, group.Count()))
+            .ToList();
+
         // Combine live and retained history by incident ID before calculating
         // the streak. This avoids counting the same collected crash twice.
         var latestBugCheck = history
@@ -126,7 +139,27 @@ public static class CrashMetricsCalculator
             trend,
             daily,
             types,
-            topCodeSource);
+            topCodeSource,
+            topApplications);
+    }
+
+    private static string ApplicationName(Incident incident)
+    {
+        const string prefix = "Application crash";
+        if (incident.Title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var suffix = incident.Title[prefix.Length..].Trim(' ', '-', '\u2014', '\u2013', ':');
+            if (suffix.Length > 0) return suffix;
+        }
+        const string marker = "Faulting application name:";
+        var at = incident.Summary.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (at >= 0)
+        {
+            var value = incident.Summary[(at + marker.Length)..];
+            var end = value.IndexOfAny([',', '\r', '\n']);
+            return Path.GetFileName((end < 0 ? value : value[..end]).Trim());
+        }
+        return "Unidentified application";
     }
 }
 

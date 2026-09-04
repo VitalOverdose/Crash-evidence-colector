@@ -30,6 +30,7 @@ public partial class MainWorkspaceTemplate
     public VirtualizingAdaptiveRowPanel NavigationRow => rowNavigation;
     public TabHeadersControl TabHeaders => tabHeadersControl1;
     public TabContentControl TabContent => tabContentControl1;
+    public FlowLayoutPanel TimelineFilters => filterRow;
 
     public VirtualModernButton CollectButton => bthCollectEvidence;
     public VirtualModernButton CancelButton => btnCancel;
@@ -44,6 +45,37 @@ public partial class MainWorkspaceTemplate
 
     /// <summary>The address/search field in the navigation row.</summary>
     public RoundedTextBox AddressBox => virtualIconButton1;
+
+    private void ApplyInvestigationTheme()
+    {
+        BackColor = UiTheme.Canvas;
+        workspaceSplitter.BackColor = UiTheme.Border;
+        timelinePanel.BackColor = UiTheme.Surface;
+        timelinePanel.Padding = new Padding(18);
+        rightHost.BackColor = UiTheme.Canvas;
+        headlineLabel.ForeColor = UiTheme.Ink;
+        headlineLabel.Font = new Font("Segoe UI Semibold", 17f);
+        countLabel.ForeColor = UiTheme.Muted;
+        filterRow.BackColor = UiTheme.Surface;
+        timelineList.BackColor = UiTheme.Surface;
+        timelineList.ForeColor = UiTheme.Ink;
+        timelineList.Font = new Font("Segoe UI", 9.2f);
+        timelineList.ShowItemToolTips = true;
+        timelineList.HideSelection = false;
+        RowActions.BackColor = UiTheme.SurfaceRaised;
+        rowNavigation.BackColor = UiTheme.Surface;
+        rowTabHeader.BackColor = UiTheme.SurfaceRaised;
+        tabHeadersControl1.BackColor = UiTheme.SurfaceRaised;
+        tabHeadersControl1.HeaderBackColor = UiTheme.SurfaceRaised;
+        panel1.LineColor = UiTheme.Border;
+        panel1.HoverLineColor = UiTheme.Accent;
+
+        foreach (Control control in filterRow.Controls)
+        {
+            control.ForeColor = control == countLabel ? UiTheme.Muted : UiTheme.Ink;
+            if (control is ComboBox or NumericUpDown) control.BackColor = UiTheme.Surface;
+        }
+    }
 
     /// <summary>True when the navigation row is currently expanded.</summary>
     public bool IsNavigationRowVisible { get; private set; } = true;
