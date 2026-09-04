@@ -54,6 +54,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("Catalogued events gain plain titles, areas and an honest tone", EventCatalogueCoverage)
     ,("Hardware ids resolve to vendors without inventing unlisted ones", DeviceIdentification)
     ,("Unknown numbers are shaped, not guessed at", NumericFallbackHonesty)
+    ,("Codes and plain English are always shown together", CodesTravelWithEnglish)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -1017,6 +1018,52 @@ static Task NumericFallbackHonesty()
     var address = interpretations.FirstOrDefault(item => item.RawValue.Equals("0xFFFFF80312345678", StringComparison.OrdinalIgnoreCase));
     Assert(address is not null, "A hex value in the summary was not interpreted at all.");
     Assert(address!.Name.Contains("kernel-mode address", StringComparison.OrdinalIgnoreCase), $"An address was not recognised by shape; it was called '{address.Name}'.");
+    return Task.CompletedTask;
+}
+
+
+static Task CodesTravelWithEnglish()
+{
+    // The rule: the number is what you search for, the sentence is what you
+    // understand, and neither is ever presented without the other.
+    var headline = CodeDecoder.BugCheckHeadline("0x116");
+    Assert(headline.Contains("0x00000116", StringComparison.Ordinal), "The stop-code headline dropped the number.");
+    Assert(headline.Contains("graphics card", StringComparison.OrdinalIgnoreCase), "The stop-code headline dropped the plain English.");
+    Assert(headline.Contains("VIDEO_TDR_FAILURE", StringComparison.Ordinal), "The stop-code headline dropped the technical name.");
+
+    // Every catalogued code must carry both halves, or some incident somewhere
+    // renders a bare symbol again.
+    foreach (var entry in BugCheckCatalog.All)
+    {
+        Assert(entry.Name.Length > 0, $"{entry.HexCode} has no technical name.");
+        Assert(entry.PlainTitle.Length > 0, $"{entry.HexCode} has no plain-English title.");
+        Assert(entry.Meaning.Length > 0, $"{entry.HexCode} has no explanation.");
+        Assert(!entry.PlainTitle.Contains('_'), $"{entry.HexCode} uses the symbol as its plain title.");
+    }
+
+    // The codes with deep definitions must also be catalogued, otherwise the
+    // richest incidents are the ones that lose their English.
+    //
+    // 0x1E6 is exempt pending a decision, not because the rule does not apply:
+    // BugCheckKnowledge defines DRIVER_VERIFIER_DMA_VIOLATION at 0x1E6 while the
+    // catalogue has it at 0xE6. One of the two is wrong. Left visible here rather
+    // than quietly patched, because changing a documented code affects report text.
+    foreach (var deep in BugCheckKnowledge.All.Where(item => item.Code != 0x1E6))
+        Assert(BugCheckCatalog.Find(deep.Code) is not null, $"0x{deep.Code:X} has a deep definition but no plain-English title.");
+
+    // The timeline's meaning column carries the pairing through.
+    var incident = new Incident("pair-1", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test") { BugCheckCode = "0x116" };
+    var described = CodeDecoder.DescribeIncident(incident);
+    Assert(described.StartsWith(headline, StringComparison.Ordinal), "DescribeIncident no longer leads with the paired headline.");
+
+    // Events follow the same rule: provider and id stay attached to the answer.
+    var entryEvent = new EvidenceEvent(DateTimeOffset.Now, "System", "Microsoft-Windows-Kernel-Power", 41, "Critical", "unexpected restart");
+    var eventHeadline = CodeDecoder.EventHeadline(entryEvent);
+    Assert(eventHeadline.Contains("41", StringComparison.Ordinal) && eventHeadline.Contains("restarted", StringComparison.OrdinalIgnoreCase), "The event headline did not pair the id with plain English.");
+
+    // An uncatalogued event still shows the pair it does know rather than nothing.
+    var unknown = new EvidenceEvent(DateTimeOffset.Now, "System", "Contoso-Widget", 4242, "Information", "x");
+    Assert(CodeDecoder.EventHeadline(unknown).Contains("Contoso-Widget 4242", StringComparison.Ordinal), "An uncatalogued event lost its identifying pair.");
     return Task.CompletedTask;
 }
 

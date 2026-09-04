@@ -67,7 +67,8 @@ internal sealed class IncidentComparisonView : UserControl
             Text = $"{incident.Timestamp.ToLocalTime():ddd d MMM yyyy, HH:mm:ss}\r\n\r\n{CodeDecoder.DescribeIncident(incident)}\r\n\r\nSource: {incident.Source}",
             AutoEllipsis = true
         };
-        var code = new Label { Dock = DockStyle.Top, Height = 36, Text = CodeDecoder.GetBugCheckLabel(incident.BugCheckCode), Font = new Font("Cascadia Mono", 9f, FontStyle.Bold), ForeColor = UiTheme.KindColor(incident.Kind), AutoEllipsis = true };
+        // Two lines at this size, so the number and its plain-English answer both fit.
+        var code = new Label { Dock = DockStyle.Top, Height = 46, Text = CodeDecoder.BugCheckHeadline(incident.BugCheckCode), Font = new Font("Cascadia Mono", 8.5f, FontStyle.Bold), ForeColor = UiTheme.KindColor(incident.Kind), AutoEllipsis = true };
         var title = new Label { Dock = DockStyle.Top, Height = 48, Text = incident.Title, Font = new Font("Segoe UI Semibold", 12f), ForeColor = UiTheme.Ink, AutoEllipsis = true };
         var kind = new Label { Dock = DockStyle.Top, Height = 25, Text = UiTheme.KindLabel(incident.Kind).ToUpperInvariant(), Font = new Font("Segoe UI Semibold", 8f), ForeColor = UiTheme.KindColor(incident.Kind) };
         card.Controls.Add(details);

@@ -41,7 +41,11 @@ public sealed class ReportWriter
             ?? (report.DumpAnalyses.Count == 1 && report.DumpAnalyses[0].Association.Status == DumpAssociationStatus.Unassessed ? report.DumpAnalyses[0] : null);
         var code = primary?.Analyze.BugCheckCode ?? report.Incident.BugCheckCode ?? "Not recorded";
         NumericParser.TryParse(code, out var numericCode);
-        var name = BugCheckKnowledge.Find(numericCode)?.Name ?? primary?.Analyze.BugCheckString ?? "Unresolved bugcheck";
+        // Resolve through the deep definitions, then the breadth catalogue, then
+        // whatever the debugger printed. The plain title travels with the name.
+        var name = BugCheckKnowledge.Find(numericCode)?.Name ?? BugCheckCatalog.Find(numericCode)?.Name ?? primary?.Analyze.BugCheckString ?? "Unresolved bugcheck";
+        var plainTitle = BugCheckCatalog.Find(numericCode)?.PlainTitle;
+        var codeHeadline = plainTitle is null ? name : $"{plainTitle} ({name})";
         var crashTime = report.CrashTimestamp.SelectedCrashTime ?? report.Incident.Timestamp;
         var sb = new StringBuilder();
         void Section(string title) { sb.AppendLine(); sb.AppendLine(title); sb.AppendLine(new string('=', title.Length)); }
@@ -51,7 +55,7 @@ public sealed class ReportWriter
         { sb.AppendLine($"** {blocker.Title.ToUpperInvariant()} **"); sb.AppendLine(blocker.Detail); sb.AppendLine(); }
         sb.AppendLine($"Selected crash time: {crashTime.ToLocalTime():F}");
         sb.AppendLine($"Time source: {report.CrashTimestamp.SelectedCrashTimeSource} ({report.CrashTimestamp.Confidence})");
-        sb.AppendLine(report.Incident.Kind == IncidentKind.ApplicationCrash ? $"Incident type: {report.Incident.Title}" : $"{code} — {name}");
+        sb.AppendLine(report.Incident.Kind == IncidentKind.ApplicationCrash ? $"Incident type: {report.Incident.Title}" : $"{code} — {codeHeadline}");
         sb.AppendLine($"Failure type: {report.Conclusion.FailureType}");
         sb.AppendLine($"Detection location: {report.Conclusion.DetectionLocation}");
         sb.AppendLine($"Active process context: {report.Conclusion.ActiveProcessContext} (context is not causation)");
@@ -171,7 +175,11 @@ public sealed class ReportWriter
         var code = primary?.Analyze.BugCheckCode ?? report.Incident.BugCheckCode ?? "Not recorded";
         NumericParser.TryParse(code, out var numericCode);
         var definition = BugCheckKnowledge.Find(numericCode);
-        var bugcheckName = definition?.Name ?? primary?.Analyze.BugCheckString ?? "Unresolved bugcheck";
+        var bugcheckName = definition?.Name ?? BugCheckCatalog.Find(numericCode)?.Name ?? primary?.Analyze.BugCheckString ?? "Unresolved bugcheck";
+        // The number is what the reader searches for; the sentence is what they
+        // understand. The report never shows one without the other.
+        var bugcheckPlainTitle = BugCheckCatalog.Find(numericCode)?.PlainTitle;
+        var bugcheckHeadline = bugcheckPlainTitle is null ? bugcheckName : $"{bugcheckPlainTitle} ({bugcheckName})";
         var assessment = report.OverallAssessment;
         var crashTime = report.CrashTimestamp.SelectedCrashTime ?? report.Incident.Timestamp;
         var isApplicationIncident = report.Incident.Kind == IncidentKind.ApplicationCrash;
@@ -188,7 +196,7 @@ public sealed class ReportWriter
 
         // A. Headline: compact answers first, before technical evidence.
         sb.Append("<section class='card'><h2>A. Headline</h2><div class='headline'>");
-        var firstMetric = isApplicationIncident ? ("Incident type", "Application crash") : ("Bugcheck", $"{code} — {bugcheckName}");
+        var firstMetric = isApplicationIncident ? ("Incident type", "Application crash") : ("Bugcheck", $"{code} — {bugcheckHeadline}");
         foreach (var metric in new[] { firstMetric, ("Failure type", report.Conclusion.FailureType), ("Detection location", report.Conclusion.DetectionLocation), ("Active process context", report.Conclusion.ActiveProcessContext), ("Underlying cause", report.Conclusion.UnderlyingCause), ("Culprit confidence", report.Conclusion.CulpritConfidence.ToString()), ("Analysis quality", $"{report.AnalysisQuality.Level} ({report.AnalysisQuality.Score}/100)") })
             sb.Append($"<div class='metric'><small>{H(metric.Item1)}</small><strong>{H(metric.Item2)}</strong></div>");
         sb.Append("</div><p class='meta'>Failure type and detection location describe where Windows detected the failure. Active process context is not automatic causation. A good dump can still leave the underlying cause undetermined.</p></section>");

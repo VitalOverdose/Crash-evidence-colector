@@ -64,7 +64,9 @@ internal sealed class IncidentDetailView : UserControl
         _eyebrow.ForeColor = color;
         _eyebrow.Text = UiTheme.KindLabel(incident.Kind).ToUpperInvariant() + (retained ? "  •  SAVED EVIDENCE" : "  •  LIVE TIMELINE");
         _title.Text = incident.Title;
-        _code.Text = CodeDecoder.GetBugCheckLabel(incident.BugCheckCode);
+        // Code and plain English travel together: the number is what you search
+        // for, the sentence is what you understand. Never one without the other.
+        _code.Text = CodeDecoder.BugCheckHeadline(incident.BugCheckCode);
         _code.Visible = !string.IsNullOrWhiteSpace(incident.BugCheckCode);
         _meaning.Text = CodeDecoder.DescribeIncident(incident);
         var reboot = incident.RebootTime?.ToLocalTime().ToString("ddd d MMM yyyy, HH:mm:ss") ?? "Not identified";
@@ -100,7 +102,7 @@ internal sealed class IncidentDetailView : UserControl
         try
         {
             Clipboard.SetText($"{_incident.Title}\r\n{UiTheme.KindLabel(_incident.Kind)} at {_incident.Timestamp.ToLocalTime():F}\r\n" +
-                              $"Code: {CodeDecoder.GetBugCheckLabel(_incident.BugCheckCode)}\r\nMeaning: {CodeDecoder.DescribeIncident(_incident)}\r\n" +
+                              $"Code: {CodeDecoder.BugCheckHeadline(_incident.BugCheckCode)}\r\nMeaning: {CodeDecoder.DescribeIncident(_incident)}\r\n" +
                               $"Time basis: {_incident.TimestampBasis}\r\nSource: {_incident.Source}");
         }
         catch { /* Clipboard contention should never break navigation. */ }

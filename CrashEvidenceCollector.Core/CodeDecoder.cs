@@ -85,9 +85,26 @@ public static partial class CodeDecoder
         return BugCheckCatalog.Find(code) is { } summary ? (summary.Name, summary.Meaning) : null;
     }
 
+    /// <summary>
+    /// The house format for a stop code: the number, the plain-English answer, and
+    /// the technical name together in one line. A reader who wants the English gets
+    /// it without hunting; a reader who wants the symbol never loses it. Neither is
+    /// ever shown without the other.
+    /// </summary>
+    public static string BugCheckHeadline(string? rawCode)
+    {
+        if (!TryParseNumber(rawCode, out var code) || code == 0) return rawCode ?? "code unavailable";
+        var hex = FormatHex(code, 8);
+        var plain = BugCheckCatalog.Find(code)?.PlainTitle;
+        var name = LookUpBugCheck(code)?.Name;
+        if (plain is null) return name is null ? hex : $"{hex} — {name}";
+        return name is null ? $"{hex} — {plain}" : $"{hex} — {plain} ({name})";
+    }
+
     public static string DescribeIncident(Incident incident)
     {
-        if (TryParseNumber(incident.BugCheckCode, out var code) && code != 0 && LookUpBugCheck(code) is { } known) return $"{FormatHex(code, 8)} — {known.Name}: {known.Meaning}";
+        if (TryParseNumber(incident.BugCheckCode, out var code) && code != 0 && LookUpBugCheck(code) is { } known)
+            return $"{BugCheckHeadline(incident.BugCheckCode)}: {known.Meaning}";
         return incident.Kind switch
         {
             IncidentKind.PowerLossOrFreeze => "Abrupt restart recorded. Event 41 does not by itself prove whether power, reset, freeze, or a bugcheck caused it.",
@@ -146,12 +163,27 @@ public static partial class CodeDecoder
     /// </summary>
     public static EventMeaning? LookUpEvent(EvidenceEvent entry) => EventCatalog.Find(entry.Provider, entry.EventId);
 
+    /// <summary>
+    /// The house format for an event: provider, id and the plain-English answer on
+    /// one line — the same pairing rule the stop codes follow.
+    /// </summary>
+    public static string EventHeadline(EvidenceEvent entry)
+    {
+        var pair = $"{entry.Provider} {entry.EventId}";
+        return EventCatalog.Find(entry.Provider, entry.EventId) is { } known ? $"{pair} — {known.PlainTitle}" : pair;
+    }
+
     private static IReadOnlyList<CodeInterpretation> InterpretEvent(EvidenceEvent entry)
     {
         var result = new List<CodeInterpretation>();
-        if (EventMeanings.TryGetValue($"{entry.Provider}|{entry.EventId}", out var meaning)) result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", $"Event {entry.EventId}", meaning));
-        else if (EventCatalog.Find(entry.Provider, entry.EventId) is { } catalogued)
-            result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", catalogued.PlainTitle, catalogued.Meaning, $"{EventCatalog.AreaLabel(catalogued.Area)} · {EventCatalog.ToneLabel(catalogued.Tone)}"));
+        // The provider and id stay attached to the plain title, so the reader can
+        // search for the pair and read what it means without choosing between them.
+        var catalogued = EventCatalog.Find(entry.Provider, entry.EventId);
+        var context = catalogued is null ? null : $"{EventCatalog.AreaLabel(catalogued.Area)} · {EventCatalog.ToneLabel(catalogued.Tone)}";
+        if (EventMeanings.TryGetValue($"{entry.Provider}|{entry.EventId}", out var meaning))
+            result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", catalogued?.PlainTitle ?? $"Event {entry.EventId}", meaning, context));
+        else if (catalogued is not null)
+            result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", catalogued.PlainTitle, catalogued.Meaning, context));
         foreach (Match match in HexCodeRegex().Matches(entry.Message)) AddNumericInterpretation(result, match.Value);
         if (entry.Data is not null)
         {
