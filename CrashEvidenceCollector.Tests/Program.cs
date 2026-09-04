@@ -1042,14 +1042,14 @@ static Task CodesTravelWithEnglish()
     }
 
     // The codes with deep definitions must also be catalogued, otherwise the
-    // richest incidents are the ones that lose their English.
-    //
-    // 0x1E6 is exempt pending a decision, not because the rule does not apply:
-    // BugCheckKnowledge defines DRIVER_VERIFIER_DMA_VIOLATION at 0x1E6 while the
-    // catalogue has it at 0xE6. One of the two is wrong. Left visible here rather
-    // than quietly patched, because changing a documented code affects report text.
-    foreach (var deep in BugCheckKnowledge.All.Where(item => item.Code != 0x1E6))
+    // richest incidents are the ones that lose their English. This check is what
+    // found DRIVER_VERIFIER_DMA_VIOLATION keyed at 0x1E6 instead of 0xE6.
+    foreach (var deep in BugCheckKnowledge.All)
         Assert(BugCheckCatalog.Find(deep.Code) is not null, $"0x{deep.Code:X} has a deep definition but no plain-English title.");
+
+    // The corrected key must resolve to the deep definition, not just the summary.
+    Assert(BugCheckKnowledge.Find(0xE6)?.Name == "DRIVER_VERIFIER_DMA_VIOLATION", "0xE6 does not reach its deep definition.");
+    Assert(BugCheckKnowledge.Find(0x1E6) is null, "0x1E6 still carries a definition it should not have.");
 
     // The timeline's meaning column carries the pairing through.
     var incident = new Incident("pair-1", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test") { BugCheckCode = "0x116" };
