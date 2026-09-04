@@ -53,6 +53,13 @@ public sealed class MainForm : Form
     private const int SelectedIncidentTabIndex = 1;
     private readonly IncidentMetricsView _metrics = new();
     private readonly LiveMonitorView _liveMonitor = new();
+    /// <summary>
+    /// Always-visible machine state. Docked on the form rather than inside a page,
+    /// so the answer to "is this machine alright?" is on screen from every tab
+    /// instead of being somewhere the user has to navigate to.
+    /// </summary>
+    private readonly Views.StatusBandView _statusBand = new();
+    private readonly System.Windows.Forms.Timer _statusClock = new() { Interval = 15000 };
     private readonly ReportViewerPanel _summaryViewer = new() { Dock = DockStyle.Fill };
     private readonly DateTimePicker _summaryFrom = new() { Format = DateTimePickerFormat.Short, Width = 120, Value = DateTime.Today.AddDays(-29) };
     private readonly DateTimePicker _summaryTo = new() { Format = DateTimePickerFormat.Short, Width = 120, Value = DateTime.Today };
@@ -92,7 +99,9 @@ public sealed class MainForm : Form
     {
         Text = "Crash Evidence Collector"; MinimumSize = new Size(1050, 680); Size = new Size(1240, 790); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9.5f); BackColor = Color.FromArgb(246, 248, 251);
         try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
-        Controls.Add(_pages); Controls.Add(BuildNavigation()); Controls.Add(_modeBanner);
+        // Added last so it docks outermost: the band spans the full width above
+        // the navigation rail and every page, and nothing can cover it.
+        Controls.Add(_pages); Controls.Add(BuildNavigation()); Controls.Add(_modeBanner); Controls.Add(_statusBand);
         _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSummaryReport()); _pages.TabPages.Add(BuildSettings());
         // Timeline columns are defined in the designer template; adding them here too would duplicate them.
         _timeline.SelectedIndexChanged += (_, _) => UpdateSelection(); _timeline.DoubleClick += (_, _) => UpdateSelection();
@@ -109,7 +118,13 @@ public sealed class MainForm : Form
         KeyDown += (_, e) => { if (e.Control && e.KeyCode == Keys.F) { e.SuppressKeyPress = true; _timelineSearch.Focus(); _timelineSearch.SelectAll(); } };
         _reportPane.ReportSurface.NavigationFailed += (_, status) => _progressText.Text = $"The report could not be displayed in the embedded viewer ({status}). Use Open output folder to view report.html in your browser.";
         _history.Click += (_, _) => _timelineRange.SelectedItem = "All time";
-        Shown += async (_, _) => await InitializeAsync(); FormClosing += (_, _) => _collectionCts?.Cancel();
+        // The band follows the live sample when monitoring is on, and ticks anyway
+        // so uptime and "since last crash" stay true while the app sits idle.
+        _liveMonitor.SampleUpdated += UpdateStatusBand;
+        _statusClock.Tick += (_, _) => UpdateStatusBand();
+        _statusBand.AttentionClicked += () => { _pages.SelectedIndex = 0; _tabs.SelectTab(0); };
+        _statusClock.Start();
+        Shown += async (_, _) => await InitializeAsync(); FormClosing += (_, _) => { _statusClock.Stop(); _collectionCts?.Cancel(); };
     }
 
     private Control BuildNavigation()
@@ -499,6 +514,7 @@ public sealed class MainForm : Form
         _history.Enabled = allIncidents.Any(x => x.Timestamp < referenceTime.AddHours(-1));
         _collect.Enabled = visible.Count > 0; if (_timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
         UpdateMetrics();
+        UpdateStatusBand();
     }
 
     // The immediate-history selector deliberately provides fine-grained hours
@@ -541,6 +557,27 @@ public sealed class MainForm : Form
         var snapshot = CrashMetricsCalculator.Build(merged, _retainedReportIncidents, referenceTime - range, referenceTime, _newIncidentIds, merged);
         _metrics.SetMetrics(snapshot, _timelineRange.SelectedItem?.ToString() ?? "Selected range");
     }
+    /// <summary>
+    /// Refreshes the always-visible band. Cheap by design: it reads the incident
+    /// list already in memory and the monitor's last published sample, so it can
+    /// run on a timer without doing any collection of its own.
+    /// </summary>
+    private void UpdateStatusBand()
+    {
+        if (IsDisposed || Disposing) return;
+        try
+        {
+            var status = MachineStatusBuilder.Build(
+                MergedIncidents().All,
+                _liveMonitor.LatestSample,
+                _liveMonitor.IsMonitoring,
+                TimeSpan.FromMilliseconds(Environment.TickCount64),
+                DateTimeOffset.Now);
+            _statusBand.SetStatus(status);
+        }
+        catch { /* Ambient chrome must never be able to break the workspace. */ }
+    }
+
     private void UpdateSelection()
     {
         if (_timeline.SelectedItems.Count == 0) return;

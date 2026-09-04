@@ -55,6 +55,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("Hardware ids resolve to vendors without inventing unlisted ones", DeviceIdentification)
     ,("Unknown numbers are shaped, not guessed at", NumericFallbackHonesty)
     ,("Codes and plain English are always shown together", CodesTravelWithEnglish)
+    ,("Machine status is derived from records, and says when it has none", MachineStatusAssessment)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -1064,6 +1065,53 @@ static Task CodesTravelWithEnglish()
     // An uncatalogued event still shows the pair it does know rather than nothing.
     var unknown = new EvidenceEvent(DateTimeOffset.Now, "System", "Contoso-Widget", 4242, "Information", "x");
     Assert(CodeDecoder.EventHeadline(unknown).Contains("Contoso-Widget 4242", StringComparison.Ordinal), "An uncatalogued event lost its identifying pair.");
+    return Task.CompletedTask;
+}
+
+
+static Task MachineStatusAssessment()
+{
+    var now = DateTimeOffset.Parse("2026-09-04T12:00:00+01:00");
+    var uptime = TimeSpan.FromHours(4);
+
+    static Incident At(string id, DateTimeOffset when, IncidentKind kind) => new(id, when, kind, "test", "test");
+    static MonitorSample Heat(double celsius, DateTimeOffset when) =>
+        new(when, 12, 12, 3000, 40, null, new Dictionary<string, double> { ["CPU Package"] = celsius }, "hwinfo");
+
+    // No history is not a clean bill of health, and must not be reported as one.
+    var empty = MachineStatusBuilder.Build([], null, false, uptime, now);
+    Assert(empty.Health == MachineHealth.Unknown, "An empty history was assessed rather than reported as unassessed.");
+    Assert(empty.HealthReason.Contains("nothing has been assessed", StringComparison.OrdinalIgnoreCase), "The unknown state did not explain itself.");
+
+    // A crash in the last day outranks everything else.
+    var fresh = MachineStatusBuilder.Build([At("a", now.AddHours(-2), IncidentKind.BugCheck)], null, true, uptime, now);
+    Assert(fresh.Health == MachineHealth.Critical, "A bugcheck two hours ago was not treated as the top state.");
+    Assert(fresh.Attention.Any(line => line.Contains("collect evidence", StringComparison.OrdinalIgnoreCase)), "A fresh crash did not prompt collection while the logs still hold it.");
+
+    // Hardware errors are reported by the machine itself, so they outrank a count.
+    var hardware = MachineStatusBuilder.Build([At("b", now.AddDays(-3), IncidentKind.HardwareError)], null, true, uptime, now);
+    Assert(hardware.Health == MachineHealth.Degrading, "A hardware error in the last week did not register as degrading.");
+
+    // Application crashes are not system incidents and must not drive the verdict.
+    var apps = new[] { At("c", now.AddHours(-1), IncidentKind.ApplicationCrash), At("d", now.AddHours(-2), IncidentKind.ApplicationCrash), At("e", now.AddHours(-3), IncidentKind.ApplicationCrash) };
+    var appsOnly = MachineStatusBuilder.Build(apps, null, true, uptime, now);
+    Assert(appsOnly.Health == MachineHealth.Stable, $"Application crashes were counted as system incidents; state was {appsOnly.Health}.");
+
+    // Heat alone is enough to stop calling a machine stable.
+    var hot = MachineStatusBuilder.Build(apps, Heat(101, now), true, uptime, now);
+    Assert(hot.Health == MachineHealth.Degrading, "A processor at 101 C was still called stable.");
+    Assert(hot.Attention.Any(line => line.Contains("cooling", StringComparison.OrdinalIgnoreCase)), "A hot processor did not raise a cooling line.");
+    Assert(hot.Readings.Single(item => item.Label == "CPU temp").Severity == StatusSeverity.Bad, "A hot reading was not marked as bad.");
+
+    // Monitoring being off is itself worth saying, because it costs the next crash.
+    var monitorOff = MachineStatusBuilder.Build(apps, null, false, uptime, now);
+    Assert(monitorOff.Attention.Any(line => line.Contains("Monitoring is off", StringComparison.OrdinalIgnoreCase)), "Monitoring being off was not surfaced.");
+    Assert(MachineStatusBuilder.Build(apps, Heat(40, now), true, uptime, now).Attention.Count == 0, "A quiet, cool, monitored machine still raised something to act on.");
+
+    // The band always carries the same cells, so nothing shifts position under the reader.
+    Assert(empty.Readings.Count == fresh.Readings.Count && fresh.Readings.Count == 5, "The band's cells are not stable across states.");
+    Assert(MachineStatusBuilder.FormatSpan(TimeSpan.FromMinutes(90)) == "1h 30m", "Durations are not formatted compactly.");
+    Assert(MachineStatusBuilder.FormatSpan(TimeSpan.FromSeconds(20)) == "just now", "A sub-minute duration was not described plainly.");
     return Task.CompletedTask;
 }
 

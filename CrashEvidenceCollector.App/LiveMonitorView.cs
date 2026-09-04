@@ -74,16 +74,33 @@ internal sealed class LiveMonitorView : UserControl
     /// <summary>Starts monitoring if it is not already running (used by the auto-start setting).</summary>
     public void StartMonitoring() { if (!_service.IsRunning) Toggle(); }
 
+    /// <summary>True while background monitoring is recording.</summary>
+    public bool IsMonitoring => _service.IsRunning;
+
+    /// <summary>
+    /// The most recent live sample, or null when nothing is being recorded. Held
+    /// here rather than re-snapshotted by every caller, because the always-visible
+    /// status band reads it on the same cadence this view already refreshes on.
+    /// </summary>
+    public MonitorSample? LatestSample { get; private set; }
+
+    /// <summary>Raised after each refresh, so chrome outside this tab can follow the live values.</summary>
+    public event Action? SampleUpdated;
+
     private void Toggle()
     {
         if (_service.IsRunning)
         {
             _service.Stop(); _refresh.Stop();
+            // Nothing is being recorded, so the last value must not linger and be
+            // read as current somewhere else in the app.
+            LatestSample = null; SampleUpdated?.Invoke();
             _toggle.Text = "Start monitoring";
             _status.Text = "Monitoring stopped. Existing history is retained for " + MonitorLog.RetentionDays + " days.";
             return;
         }
         _service.Start(); _refresh.Start();
+        SampleUpdated?.Invoke();
         _toggle.Text = "Stop monitoring";
         var hwinfo = HwInfoGadgetReader.Read() is not null;
         _status.Text = hwinfo
@@ -95,6 +112,7 @@ internal sealed class LiveMonitorView : UserControl
     {
         var (samples, events) = _service.Snapshot();
         var latest = samples.Count > 0 ? samples[^1] : null;
+        LatestSample = latest; SampleUpdated?.Invoke();
         var temperature = latest is null ? null : HwInfoGadgetReader.SelectCpuTemperature(latest);
         _temperature.Text = temperature is null ? "—" : $"{temperature:0} °C" + (latest?.HwInfoSensors is null ? " (ACPI zone)" : string.Empty);
         _temperature.ForeColor = temperature >= 95 ? Color.Firebrick : temperature >= 85 ? Color.DarkGoldenrod : Color.FromArgb(20, 35, 59);
