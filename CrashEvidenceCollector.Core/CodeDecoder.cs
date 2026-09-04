@@ -10,7 +10,7 @@ public static partial class CodeDecoder
     {
         [0x01] = ("APC_INDEX_MISMATCH", "A driver or system call left asynchronous procedure call state unbalanced."),
         [0x0A] = ("IRQL_NOT_LESS_OR_EQUAL", "Kernel-mode code accessed invalid or pageable memory at an elevated interrupt level; a driver or memory corruption is often involved."),
-        [0x1A] = ("MEMORY_MANAGEMENT", "Windows detected severe memory-management corruption. RAM, storage-backed paging, or a driver can be involved."),
+        [0x1A] = ("MEMORY_MANAGEMENT", "Windows detected severe memory-management corruption. Despite the name this does not prove faulty RAM: drivers, storage-backed paging and CPU instability all produce it, and the memory manager is usually the detector rather than the cause."),
         [0x24] = ("NTFS_FILE_SYSTEM", "The NTFS filesystem driver encountered a condition it could not safely handle."),
         [0x3B] = ("SYSTEM_SERVICE_EXCEPTION", "An exception occurred while Windows was executing a system service, commonly involving a driver or corrupted memory."),
         [0x50] = ("PAGE_FAULT_IN_NONPAGED_AREA", "Kernel code referenced memory that should always have been resident but was invalid."),
@@ -74,9 +74,20 @@ public static partial class CodeDecoder
         ["Service Control Manager|7034"] = "A Windows service terminated unexpectedly without a recovery action."
     };
 
+    /// <summary>
+    /// Resolves a stop code against the detailed table first and the breadth-first
+    /// catalogue second, so a code this app cannot analyse deeply still gets a name
+    /// and a sentence instead of raw hexadecimal.
+    /// </summary>
+    private static (string Name, string Meaning)? LookUpBugCheck(ulong code)
+    {
+        if (BugChecks.TryGetValue(code, out var known)) return known;
+        return BugCheckCatalog.Find(code) is { } summary ? (summary.Name, summary.Meaning) : null;
+    }
+
     public static string DescribeIncident(Incident incident)
     {
-        if (TryParseNumber(incident.BugCheckCode, out var code) && code != 0 && BugChecks.TryGetValue(code, out var known)) return $"{FormatHex(code, 8)} — {known.Name}: {known.Meaning}";
+        if (TryParseNumber(incident.BugCheckCode, out var code) && code != 0 && LookUpBugCheck(code) is { } known) return $"{FormatHex(code, 8)} — {known.Name}: {known.Meaning}";
         return incident.Kind switch
         {
             IncidentKind.PowerLossOrFreeze => "Abrupt restart recorded. Event 41 does not by itself prove whether power, reset, freeze, or a bugcheck caused it.",
@@ -90,15 +101,27 @@ public static partial class CodeDecoder
     public static string GetBugCheckLabel(string? rawCode)
     {
         if (!TryParseNumber(rawCode, out var code)) return rawCode ?? "code unavailable";
-        return BugChecks.TryGetValue(code, out var known) ? $"{FormatHex(code, 8)} — {known.Name}" : FormatHex(code, 8);
+        return LookUpBugCheck(code) is { } known ? $"{FormatHex(code, 8)} — {known.Name}" : FormatHex(code, 8);
     }
+
+    /// <summary>
+    /// A short plain-English title for a stop code — "The graphics card stopped
+    /// responding and could not be reset" rather than VIDEO_TDR_FAILURE. Returns
+    /// null when the code is not in the catalogue, so callers can stay honest.
+    /// </summary>
+    public static string? GetBugCheckPlainTitle(string? rawCode)
+        => TryParseNumber(rawCode, out var code) && BugCheckCatalog.Find(code) is { } summary ? summary.PlainTitle : null;
+
+    /// <summary>The part of Windows that reported a stop code, for grouping and filtering.</summary>
+    public static BugCheckFamily GetBugCheckFamily(string? rawCode)
+        => TryParseNumber(rawCode, out var code) && BugCheckCatalog.Find(code) is { } summary ? summary.Family : BugCheckFamily.Unknown;
 
     public static IReadOnlyList<CodeInterpretation> Interpret(Incident incident, IReadOnlyList<EvidenceEvent> events)
     {
         var result = new List<CodeInterpretation>();
         if (TryParseNumber(incident.BugCheckCode, out var bugCheck) && bugCheck != 0)
         {
-            if (BugChecks.TryGetValue(bugCheck, out var known)) result.Add(new("Bugcheck", incident.BugCheckCode!, known.Name, known.Meaning, $"Unsigned decimal: {bugCheck:N0}; padded hex: {FormatHex(bugCheck, 8)}"));
+            if (LookUpBugCheck(bugCheck) is { } known) result.Add(new("Bugcheck", incident.BugCheckCode!, known.Name, known.Meaning, $"Unsigned decimal: {bugCheck:N0}; padded hex: {FormatHex(bugCheck, 8)}"));
             else result.Add(new("Bugcheck", incident.BugCheckCode!, "Unknown or uncommon bugcheck", "The raw stop code is preserved for WinDbg or Microsoft documentation lookup.", $"Unsigned decimal: {bugCheck:N0}; padded hex: {FormatHex(bugCheck, 8)}"));
         }
         if (incident.Parameters is not null)
@@ -112,14 +135,23 @@ public static partial class CodeDecoder
     public static string DescribeEvent(EvidenceEvent entry)
     {
         var decoded = InterpretEvent(entry);
-        if (decoded.Count == 0) return "No built-in plain-English explanation is available for this event; its original provider, ID and data are preserved.";
+        if (decoded.Count == 0) return $"This app has no entry for {entry.Provider} event {entry.EventId}. The original record is preserved in full below — use Research to look the pair up.";
         return string.Join(" ", decoded.Take(6).Select(item => $"{item.RawValue}: {item.Name} — {item.Explanation}"));
     }
+
+    /// <summary>
+    /// The plain-English title for an event, and how much attention it deserves.
+    /// Returns null when the pair is not catalogued, so the caller can say so
+    /// rather than implying the event was inspected and found harmless.
+    /// </summary>
+    public static EventMeaning? LookUpEvent(EvidenceEvent entry) => EventCatalog.Find(entry.Provider, entry.EventId);
 
     private static IReadOnlyList<CodeInterpretation> InterpretEvent(EvidenceEvent entry)
     {
         var result = new List<CodeInterpretation>();
         if (EventMeanings.TryGetValue($"{entry.Provider}|{entry.EventId}", out var meaning)) result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", $"Event {entry.EventId}", meaning));
+        else if (EventCatalog.Find(entry.Provider, entry.EventId) is { } catalogued)
+            result.Add(new("Windows event", $"{entry.Provider} / {entry.EventId}", catalogued.PlainTitle, catalogued.Meaning, $"{EventCatalog.AreaLabel(catalogued.Area)} · {EventCatalog.ToneLabel(catalogued.Tone)}"));
         foreach (Match match in HexCodeRegex().Matches(entry.Message)) AddNumericInterpretation(result, match.Value);
         if (entry.Data is not null)
         {
@@ -146,8 +178,56 @@ public static partial class CodeDecoder
             result.Add(new("HRESULT", raw, $"HRESULT_FROM_WIN32({win32})", message, $"Embedded Windows error: {win32}; unsigned decimal: {value:N0}"));
             return;
         }
-        result.Add(new("Hex value", raw, "Unrecognised code or numeric value", "No reliable symbolic meaning is built in. It may be a code, address, flag, or parameter, so the application does not guess.", $"Unsigned decimal: {value:N0}"));
+        // NTSTATUS values not in the short table above are still worth naming.
+        if (TypedCodeDecoders.DecodeNtStatus(value) is { } ntStatus)
+        {
+            result.Add(new("Exception/status", raw, ntStatus.Name, ntStatus.Explanation, $"Unsigned decimal: {value:N0}"));
+            return;
+        }
+        // A bare Windows error number, as printed by service and installer records.
+        if (value is > 0 and <= 15999 && DescribeWin32(unchecked((int)value)) is { } win32Text)
+        {
+            result.Add(new("Windows error", raw, $"Windows error {value}", win32Text, $"Also written as 0x{value:X8}"));
+            return;
+        }
+        // A failure HRESULT from a facility other than Win32. Only reported when
+        // Windows actually has text for it — a generic "Unknown error" is noise.
+        if ((value & 0x80000000UL) != 0 && value <= 0xFFFFFFFFUL && DescribeWin32(unchecked((int)value)) is { } hresultText)
+        {
+            result.Add(new("HRESULT", raw, $"HRESULT 0x{value:X8}", hresultText, $"Unsigned decimal: {value:N0}"));
+            return;
+        }
+        result.Add(new("Hex value", raw, ClassifyBareValue(value), "No symbolic meaning is defined for this value in the code tables, so it is preserved exactly as Windows printed it rather than guessed at.", $"Unsigned decimal: {value:N0}; padded hex: {FormatHex(value, 8)}"));
     }
+
+    /// <summary>
+    /// Windows' own text for an error number, or null when Windows has none.
+    /// Presenting "Unknown error (0x…)" as a decode is worse than admitting nothing
+    /// was found, so that answer is filtered out here.
+    /// </summary>
+    private static string? DescribeWin32(int code)
+    {
+        try
+        {
+            var message = new Win32Exception(code).Message;
+            return string.IsNullOrWhiteSpace(message) || message.StartsWith("Unknown error", StringComparison.OrdinalIgnoreCase) ? null : message;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Says what shape a number has when its meaning is unknown. "Looks like a
+    /// kernel address" is a smaller claim than a decode, but it is still more
+    /// than the reader had.
+    /// </summary>
+    private static string ClassifyBareValue(ulong value) => value switch
+    {
+        0 => "Zero",
+        < 0x1000 => "Small value — a count, index or flag",
+        _ when (value >> 48) == 0xFFFF => "Looks like a kernel-mode address",
+        _ when value > 0xFFFFFFFFUL => "Looks like a 64-bit address",
+        _ => "Unrecognised value"
+    };
 
     private static string DescribeApplicationCrash(string summary)
     {

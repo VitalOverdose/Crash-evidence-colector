@@ -50,6 +50,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ,("Application failures report their faulting module and exception", ApplicationFailureDetail)
     ,("Date-range summary aggregates collected and uncollected incidents", CrashSummaryHandling)
     ,("Web search treats evidence text as a query, not an address", WebSearchTargets)
+    ,("Catalogued stop codes gain names, plain titles and families", BugCheckCatalogueCoverage)
+    ,("Catalogued events gain plain titles, areas and an honest tone", EventCatalogueCoverage)
+    ,("Hardware ids resolve to vendors without inventing unlisted ones", DeviceIdentification)
+    ,("Unknown numbers are shaped, not guessed at", NumericFallbackHonesty)
 };
 var failed = 0;
 foreach (var test in tests)
@@ -921,4 +925,99 @@ static async Task<DumpAnalysisResult> ParseFixture(string name)
 }
 
 static string EventXml(string provider, int id, string channel, string time, string record) => $"<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='{provider}'/><EventID>{id}</EventID><Level>2</Level><TimeCreated SystemTime='{time}'/><EventRecordID>{record}</EventRecordID><Channel>{channel}</Channel></System><EventData><Data Name='Reason'>test</Data></EventData></Event>";
+
+static Task BugCheckCatalogueCoverage()
+{
+    // Breadth is the point: a code with no deep analysis must still get a name.
+    Assert(BugCheckCatalog.Count > 120, $"The stop-code catalogue is too thin to remove the raw-hex problem ({BugCheckCatalog.Count} entries).");
+    Assert(BugCheckKnowledge.Find(0xEA) is null, "0xEA was expected to have no deep definition, which is what makes it a fallback case.");
+
+    var thread = BugCheckCatalog.Find(0xEA);
+    Assert(thread is not null && thread.Name == "THREAD_STUCK_IN_DEVICE_DRIVER", "0xEA was not named by the catalogue.");
+    Assert(thread!.Family == BugCheckFamily.Graphics, "0xEA was not grouped with the graphics family.");
+
+    // The path the timeline and briefing actually call must pick the fallback up.
+    var incident = new Incident("cat-1", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test") { BugCheckCode = "0xEA" };
+    var described = CodeDecoder.DescribeIncident(incident);
+    Assert(described.Contains("THREAD_STUCK_IN_DEVICE_DRIVER", StringComparison.Ordinal), "DescribeIncident did not fall through to the catalogue.");
+    Assert(CodeDecoder.GetBugCheckLabel("0xEA").Contains("THREAD_STUCK", StringComparison.Ordinal), "GetBugCheckLabel did not fall through to the catalogue.");
+    Assert(CodeDecoder.GetBugCheckPlainTitle("0xEA") is { Length: > 0 }, "No plain-English title was offered for a catalogued code.");
+    Assert(CodeDecoder.GetBugCheckFamily("0xD1") == BugCheckFamily.Driver, "0xD1 was not grouped with the driver family.");
+
+    // Deep definitions must still win, so the detailed report text is unchanged.
+    var deep = new Incident("cat-2", DateTimeOffset.Now, IncidentKind.BugCheck, "Bugcheck", "test") { BugCheckCode = "0x1A" };
+    Assert(CodeDecoder.DescribeIncident(deep).Contains("does not prove", StringComparison.OrdinalIgnoreCase), "The 0x1A caution about RAM was lost.");
+
+    // A code that genuinely is not defined must stay unnamed rather than invented.
+    Assert(BugCheckCatalog.Find(0x0BADF00D) is null, "An undefined stop code was given a meaning.");
+    return Task.CompletedTask;
+}
+
+static Task EventCatalogueCoverage()
+{
+    Assert(EventCatalog.Count > 80, $"The event catalogue is too thin to cover a real System log ({EventCatalog.Count} entries).");
+
+    // Long and short provider names are the same source and must resolve alike.
+    var longName = EventCatalog.Find("Microsoft-Windows-Kernel-Power", 41);
+    var shortName = EventCatalog.Find("Kernel-Power", 41);
+    Assert(longName is not null && shortName is not null && longName.PlainTitle == shortName.PlainTitle, "Provider name normalisation failed.");
+    Assert(longName!.Tone == EventTone.Serious, "Event 41 was not treated as serious.");
+
+    // Routine noise must be labelled routine, or the reader stops trusting warnings.
+    Assert(EventCatalog.Find("Microsoft-Windows-Kernel-Processor-Power", 55)?.Tone == EventTone.Routine, "Processor power-state changes were not described as routine.");
+    Assert(EventCatalog.Find("Service Control Manager", 7036)?.Tone == EventTone.Routine, "Routine service state changes were not described as routine.");
+    Assert(EventCatalog.Find("Display", 4101)?.Area == EventArea.Graphics, "The TDR recovery event was not grouped with graphics.");
+
+    // The decoding path used by the report must pick catalogued events up.
+    var entry = new EvidenceEvent(DateTimeOffset.Now, "System", "Display", 4101, "Warning", "display driver stopped responding");
+    Assert(CodeDecoder.DescribeEvent(entry).Contains("stopped responding", StringComparison.OrdinalIgnoreCase), "DescribeEvent did not use the catalogue.");
+
+    // An uncatalogued pair must say so plainly and name what it could not explain.
+    var unknown = new EvidenceEvent(DateTimeOffset.Now, "System", "Contoso-Widget", 4242, "Information", "no hex here");
+    var text = CodeDecoder.DescribeEvent(unknown);
+    Assert(text.Contains("Contoso-Widget", StringComparison.Ordinal) && text.Contains("4242", StringComparison.Ordinal), "The unknown-event message did not name the provider and id.");
+    return Task.CompletedTask;
+}
+
+static Task DeviceIdentification()
+{
+    var gpu = DeviceCatalog.Identify(@"PCI\VEN_10DE&DEV_2684&SUBSYS_167E10DE&REV_A1");
+    Assert(gpu is not null && gpu.VendorName == "NVIDIA Corporation", "A PCI vendor id was not resolved to its vendor.");
+    Assert(gpu!.ProductId == "0x2684", "The PCI device id was not extracted.");
+
+    var mouse = DeviceCatalog.Identify(@"USB\VID_046D&PID_C08B&MI_00");
+    Assert(mouse is not null && mouse.VendorName == "Logitech", "A USB vendor id was not resolved to its vendor.");
+
+    // An unlisted vendor must be reported as unlisted, never described.
+    var unlisted = DeviceCatalog.Identify(@"PCI\VEN_FFFE&DEV_0001");
+    Assert(unlisted is not null && !unlisted.IsVendorKnown, "An unlisted PCI vendor was given a name.");
+    Assert(unlisted!.Describe().Contains("unlisted", StringComparison.OrdinalIgnoreCase), "An unlisted vendor was not described as unlisted.");
+
+    // Ids that carry no vendor field must not be forced into a guess.
+    Assert(DeviceCatalog.Identify(@"ACPI\PNP0C02\1") is null, "An ACPI id was treated as though it carried a vendor.");
+    Assert(DeviceCatalog.Identify(null) is null, "A null hardware id did not return null.");
+
+    Assert(DeviceCatalog.ProblemCode(43) is { Length: > 0 }, "Device Manager problem code 43 was not explained.");
+    Assert(DeviceCatalog.ProblemCode(9999) is null, "An undefined problem code was given a meaning.");
+    return Task.CompletedTask;
+}
+
+static Task NumericFallbackHonesty()
+{
+    // Interpret() reads bugcheck fields and event messages; the event message is
+    // where loose hex values actually reach it in production.
+    var incident = new Incident("num-1", DateTimeOffset.Now, IncidentKind.ApplicationCrash, "Application crash", "test");
+    var carrier = new EvidenceEvent(DateTimeOffset.Now, "Application", "Application Error", 1000, "Error", "exception 0xC0000374 at 0xFFFFF80312345678");
+    var interpretations = CodeDecoder.Interpret(incident, [carrier]);
+
+    var heap = interpretations.FirstOrDefault(item => item.RawValue.Equals("0xC0000374", StringComparison.OrdinalIgnoreCase));
+    Assert(heap is not null && heap.Name.Contains("HEAP_CORRUPTION", StringComparison.Ordinal), "A known NTSTATUS was not decoded.");
+
+    // An address must be shaped rather than either guessed at or dismissed.
+    var address = interpretations.FirstOrDefault(item => item.RawValue.Equals("0xFFFFF80312345678", StringComparison.OrdinalIgnoreCase));
+    Assert(address is not null, "A hex value in the summary was not interpreted at all.");
+    Assert(address!.Name.Contains("kernel-mode address", StringComparison.OrdinalIgnoreCase), $"An address was not recognised by shape; it was called '{address.Name}'.");
+    return Task.CompletedTask;
+}
+
 static void Assert(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
