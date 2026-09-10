@@ -3,13 +3,9 @@
   <ItemGroup>
     <ProjectReference Include="..\CrashEvidenceCollector.Core\CrashEvidenceCollector.Core.csproj" />
     <ProjectReference Include="..\CrashEvidenceCollector.Helper\CrashEvidenceCollector.Helper.csproj" ReferenceOutputAssembly="false" />
-    <!-- Vendored snapshot of the read-only donor library (net8.0-windows loads under
-         net10). Referencing the DLL, not the project, keeps this solution buildable
-         while the donor repo is mid-edit; refresh libs\EliteBrowserShell.dll
-         deliberately from a known-good donor build. -->
-    <Reference Include="EliteBrowserShell">
-      <HintPath>..\libs\EliteBrowserShell.dll</HintPath>
-    </Reference>
+    <!-- Use the live control project so the designer and compiler share the same
+         public custom-control definitions while this UI is being developed. -->
+    <ProjectReference Include="..\..\EliteBrowserShell\EliteBrowserShell.csproj" />
     <!-- The app's single package: required by the vendored shell's WebView2 composites. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
     <!-- Design-time only: the shell library's custom controls carry designers that

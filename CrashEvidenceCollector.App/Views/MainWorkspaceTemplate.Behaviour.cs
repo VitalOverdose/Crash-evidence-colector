@@ -7,7 +7,7 @@ namespace CrashEvidenceCollector.App.Views;
 /// Behaviour for the designer-authored workspace layout, kept in its own file so
 /// the designer never has to round-trip hand-written code.
 ///
-/// The layout is a vStackPanel of four rows: actions, tab headers, navigation, and
+/// The layout is a vStackPanel of three rows: tab headers, navigation, and
 /// the content area (the spring). The navigation row is only meaningful on a web
 /// tab, so it collapses to nothing elsewhere — its rule already carries
 /// CollapsedHeight = 0.
@@ -15,7 +15,6 @@ namespace CrashEvidenceCollector.App.Views;
 public partial class MainWorkspaceTemplate
 {
     /// <summary>Row names as authored in the designer; the vStack API addresses rows by name.</summary>
-    public const string ActionsRowName = "RowActions";
     public const string TabHeaderRowName = "rowTabHeader";
     public const string NavigationRowName = "rowNavigation";
     /// <summary>
@@ -25,12 +24,10 @@ public partial class MainWorkspaceTemplate
     public const string ContentRowName = "tabContentControl1";
 
     public vStackPanel Stack => vStackPanel1;
-    public VirtualizingAdaptiveRowPanel ActionsRow => RowActions;
     public VirtualizingAdaptiveRowPanel TabHeaderRow => rowTabHeader;
     public VirtualizingAdaptiveRowPanel NavigationRow => rowNavigation;
     public TabHeadersControl TabHeaders => tabHeadersControl1;
     public TabContentControl TabContent => tabContentControl1;
-    public FlowLayoutPanel TimelineFilters => filterRow;
 
     /// <summary>
     /// The left pane itself. Its designer children dock in this order, bottom-up
@@ -40,16 +37,12 @@ public partial class MainWorkspaceTemplate
     /// </summary>
     public Panel TimelinePanel => timelinePanel;
 
-    public VirtualModernButton CollectButton => bthCollectEvidence;
-    public VirtualModernButton CancelButton => btnCancel;
-    public VirtualModernButton PastHistoryButton => btnPastHistory;
-    public VirtualModernButton OpenOutputFolderButton => bthOpenOutputFolder;
-    public VirtualModernButton CopySummaryButton => btnCopySummary;
-
     public VirtualIconButton BackButton => btnBack;
     public VirtualIconButton RefreshButton => btnRefresh;
-    public VirtualIconButton GoButton => incBtnGo;
-    public VirtualIconButton PasteButton => incBtnPaste;
+    // The designer field names predate the final artwork: incBtnPaste carries
+    // the green Go glyph and incBtnGo carries the clipboard glyph.
+    public VirtualIconButton GoButton => incBtnPaste;
+    public VirtualIconButton PasteButton => incBtnGo;
 
     /// <summary>The address/search field in the navigation row.</summary>
     public RoundedTextBox AddressBox => virtualIconButton1;
@@ -61,28 +54,18 @@ public partial class MainWorkspaceTemplate
         timelinePanel.BackColor = UiTheme.Surface;
         timelinePanel.Padding = new Padding(18);
         rightHost.BackColor = UiTheme.Canvas;
-        headlineLabel.ForeColor = UiTheme.Ink;
-        headlineLabel.Font = new Font("Segoe UI Semibold", 17f);
-        countLabel.ForeColor = UiTheme.Muted;
-        filterRow.BackColor = UiTheme.Surface;
+        virtualIconButton3.ForeColor = UiTheme.Ink;
+        virtualIconButton3.Font = new Font("Segoe UI Semibold", 17f);
+        virtualIconButton8.ForeColor = UiTheme.Muted;
         timelineList.BackColor = UiTheme.Surface;
         timelineList.ForeColor = UiTheme.Ink;
         timelineList.Font = new Font("Segoe UI", 9.2f);
         timelineList.ShowItemToolTips = true;
         timelineList.HideSelection = false;
-        RowActions.BackColor = UiTheme.SurfaceRaised;
         rowNavigation.BackColor = UiTheme.Surface;
         rowTabHeader.BackColor = UiTheme.SurfaceRaised;
         tabHeadersControl1.BackColor = UiTheme.SurfaceRaised;
         tabHeadersControl1.HeaderBackColor = UiTheme.SurfaceRaised;
-        panel1.LineColor = UiTheme.Border;
-        panel1.HoverLineColor = UiTheme.Accent;
-
-        foreach (Control control in filterRow.Controls)
-        {
-            control.ForeColor = control == countLabel ? UiTheme.Muted : UiTheme.Ink;
-            if (control is ComboBox or NumericUpDown) control.BackColor = UiTheme.Surface;
-        }
     }
 
     /// <summary>True when the navigation row is currently expanded.</summary>

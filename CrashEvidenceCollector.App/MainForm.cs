@@ -1,47 +1,21 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using CrashEvidenceCollector.Core;
+using ProfessorSnowsVideoDownloader.CustomControls;
 using ProfessorSnowsVideoDownloader.Composites;
 
 namespace CrashEvidenceCollector.App;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
-    private static readonly Image? Logo = LoadLogo();
-
-    private void InitializeComponent()
-    {
-
-    }
-
-    private static Image? LoadLogo()
-    {
-        try { using var stream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.png"); return stream is null ? null : Image.FromStream(stream); }
-        catch { return null; }
-    }
-
     private readonly Color _nav = UiTheme.Nav;
     private readonly Color _accent = UiTheme.Accent;
-    private readonly TabControl _pages = new() { Dock = DockStyle.Fill, Appearance = TabAppearance.FlatButtons, ItemSize = new Size(0, 1), SizeMode = TabSizeMode.Fixed };
     private ListView _timeline = null!;
-    private ComboBox _timelineRange = null!;
-    private NumericUpDown _customRangeHours = null!;
-    private ComboBox _timelineType = null!;
-    private Label _timelineCount = null!;
-    private Label _headline = null!;
     private readonly Views.IncidentDetailView _incidentView = new();
     private readonly Views.IncidentComparisonView _comparisonView = new();
-    private readonly TextBox _timelineSearch = new() { Width = 235, PlaceholderText = "Search codes, programs, meaning...", BorderStyle = BorderStyle.FixedSingle };
-    private readonly Button _clearTimelineSearch = UiTheme.ActionButton("Clear");
     private readonly List<Button> _navButtons = [];
-    private readonly Label _modeBanner = new() { Dock = DockStyle.Top, Height = 34, TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(255, 238, 184), ForeColor = Color.FromArgb(95, 63, 0), Visible = false };
     private readonly ProgressBar _progress = new() { Dock = DockStyle.Bottom, Height = 8 };
     private readonly Label _progressText = new() { Dock = DockStyle.Bottom, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(75, 85, 99) };
-    private Button _collect = null!;
-    private Button _cancel = null!;
-    private Button _openOutput = null!;
-    private Button _copySummary = null!;
-    private Button _history = null!;
-    private readonly Views.MainWorkspaceTemplate _workspace = new() { Dock = DockStyle.Fill };
     private readonly Views.EvidenceStatusView _evidenceView = new();
     private readonly Views.RawDebuggerView _rawView = new();
     private readonly Views.ReadableReportView _reportPane = new();
@@ -100,59 +74,46 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _collectionCts;
     private CollectionResult? _lastResult;
 
+    private static bool IsDesignerHosted => LicenseManager.UsageMode == LicenseUsageMode.Designtime;
+
     public MainForm()
     {
-        Text = "Crash Evidence Collector"; MinimumSize = new Size(1050, 680); Size = new Size(1240, 790); StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 9.5f); BackColor = Color.FromArgb(246, 248, 251);
+        InitializeComponent();
+        if (IsDesignerHosted) return;
         try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
-        // Added last so it docks outermost: the band spans the full width above
-        // the navigation rail and every page, and nothing can cover it.
-        Controls.Add(_pages); Controls.Add(BuildNavigation()); Controls.Add(_modeBanner); Controls.Add(_statusBand);
+        ConfigureNavigation();
+        Controls.Add(_statusBand);
+        _pages.TabPages.Clear();
         _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSummaryReport()); _pages.TabPages.Add(BuildSettings());
         // Timeline columns are defined in the designer template; adding them here too would duplicate them.
         _timeline.SelectedIndexChanged += (_, _) => UpdateSelection(); _timeline.DoubleClick += (_, _) => UpdateSelection();
-        _timelineRange.Items.AddRange(["Last 30 minutes", "Last hour", "Last 2 hours", "Last 3 hours", "Last 6 hours", "Last 12 hours", "Last 24 hours", "Last 3 days", "Last 7 days", "Last 30 days", "Last 90 days", "Last 6 months", "Last year", "All time", "Custom hours"]);
-        _timelineRange.SelectedItem = "All time";
-        _timelineRange.SelectedIndexChanged += (_, _) => PopulateTimeline();
-        _customRangeHours.ValueChanged += (_, _) => { if (_timelineRange.SelectedItem?.ToString() != "Custom hours") _timelineRange.SelectedItem = "Custom hours"; else PopulateTimeline(); };
-        _timelineType.Items.AddRange(["System crashes and shutdowns", "All incident types", "Application crashes only", "Hardware errors only"]); _timelineType.SelectedIndex = 0;
-        _timelineType.SelectedIndexChanged += (_, _) => PopulateTimeline();
-        _timelineSearch.TextChanged += (_, _) => PopulateTimeline();
-        _clearTimelineSearch.Click += (_, _) => { _timelineSearch.Clear(); _timelineSearch.Focus(); };
-        _collect.Click += async (_, _) => await CollectAsync(); _cancel.Click += (_, _) => _collectionCts?.Cancel(); _openOutput.Click += (_, _) => OpenOutput(); _copySummary.Click += (_, _) => CopySummary();
+        _workspace.FilterChanged += _ => PopulateTimeline();
         KeyPreview = true;
-        KeyDown += (_, e) => { if (e.Control && e.KeyCode == Keys.F) { e.SuppressKeyPress = true; _timelineSearch.Focus(); _timelineSearch.SelectAll(); } };
+        KeyDown += (_, e) => { if (e.Alt && e.KeyCode == Keys.Left) { e.SuppressKeyPress = true; _workspace.GoBackInTimeline(); } };
+        KeyDown += (_, e) => { if (e.Control && e.KeyCode == Keys.F) { e.SuppressKeyPress = true; _workspace.FocusTimelineSearch(); } };
         _reportPane.ReportSurface.NavigationFailed += (_, status) => _progressText.Text = $"The report could not be displayed in the embedded viewer ({status}). Use Open output folder to view report.html in your browser.";
-        _history.Click += (_, _) => _timelineRange.SelectedItem = "All time";
         // The band follows the live sample when monitoring is on, and ticks anyway
         // so uptime and "since last crash" stay true while the app sits idle.
         _liveMonitor.SampleUpdated += UpdateStatusBand;
         _statusClock.Tick += (_, _) => UpdateStatusBand();
         _statusBand.AttentionClicked += () => { _pages.SelectedIndex = 0; _tabs.SelectTab(0); };
+        _statusBand.LastSevenDaysClicked += () =>
+        {
+            _pages.SelectedIndex = 0;
+            _workspace.SelectTimelineRange("Last 7 days");
+        };
         _statusClock.Start();
         Shown += async (_, _) => await InitializeAsync(); FormClosing += (_, _) => { _statusClock.Stop(); _collectionCts?.Cancel(); };
     }
 
-    private Control BuildNavigation()
+    private void ConfigureNavigation()
     {
-        var panel = new Panel { Dock = DockStyle.Left, Width = 228, BackColor = _nav, Padding = new Padding(14, 18, 14, 14) };
-        var navStack = new Panel { Dock = DockStyle.Top, Height = 190, Padding = new Padding(0, 8, 0, 0) };
-        var buttons = new[] { ("COMMAND CENTER", 0), ("SUMMARY INTELLIGENCE", 1), ("SYSTEM SETTINGS", 2) };
-        foreach (var (text, page) in buttons.Reverse())
-        {
-            var button = NavButton(text);
-            button.Click += (_, _) => _pages.SelectedIndex = page;
-            _navButtons.Insert(0, button);
-            navStack.Controls.Add(button);
-        }
+        _navButtons.AddRange([commandCenterButton, summaryIntelligenceButton, systemSettingsButton]);
+        commandCenterButton.Click += (_, _) => _pages.SelectedIndex = 0;
+        summaryIntelligenceButton.Click += (_, _) => _pages.SelectedIndex = 1;
+        systemSettingsButton.Click += (_, _) => _pages.SelectedIndex = 2;
         _pages.SelectedIndexChanged += (_, _) => UpdateNavigationState();
-        panel.Controls.Add(navStack);
-        Control branding = Logo is not null
-            ? new PictureBox { Dock = DockStyle.Top, Height = 112, Image = Logo, SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 0, 8) }
-            : new Label { Dock = DockStyle.Top, Height = 70, Text = "Crash Evidence\nCollector", ForeColor = Color.White, Font = new Font("Segoe UI Semibold", 15) };
-        panel.Controls.Add(branding);
-        var safety = new Label { Dock = DockStyle.Bottom, Height = 96, Text = "\u25CF  COLLECTION SAFE\n\nRead-only analysis. No drivers, services, registry settings, or crash configuration are changed.", ForeColor = Color.FromArgb(153, 179, 207), Font = new Font("Segoe UI", 8.3f) }; panel.Controls.Add(safety);
         UpdateNavigationState();
-        return panel;
     }
 
     private void UpdateNavigationState()
@@ -182,27 +143,7 @@ public sealed class MainForm : Form
         var page = Page();
 
         _timeline = _workspace.TimelineList;
-        _timelineRange = _workspace.RangeBox;
-        _customRangeHours = _workspace.CustomHours;
-        _timelineType = _workspace.TypeBox;
-        _timelineCount = _workspace.CountLabel;
-        _headline = _workspace.HeadlineLabel;
-        _collect = _workspace.CollectButton;
-        _cancel = _workspace.CancelButton;
-        _history = _workspace.PastHistoryButton;
-        _openOutput = _workspace.OpenOutputFolderButton;
-        _copySummary = _workspace.CopySummaryButton;
-        _cancel.Enabled = _openOutput.Enabled = _copySummary.Enabled = false;
-
-        _workspace.TimelineFilters.Height = 104;
-        _timelineSearch.Margin = new Padding(6, 5, 4, 0);
-        _timelineSearch.Font = new Font("Segoe UI", 9.3f);
-        _clearTimelineSearch.Height = 29;
-        _clearTimelineSearch.Padding = new Padding(8, 1, 8, 1);
-        _clearTimelineSearch.Margin = new Padding(0, 3, 0, 0);
-        _workspace.TimelineFilters.Controls.Add(new Label { Text = "Find", AutoSize = true, ForeColor = UiTheme.Muted, Padding = new Padding(8, 8, 0, 0) });
-        _workspace.TimelineFilters.Controls.Add(_timelineSearch);
-        _workspace.TimelineFilters.Controls.Add(_clearTimelineSearch);
+        _workspace.InitializeTimelineFilters();
 
         // The briefing belongs beside the evidence it describes, not behind a tab.
         // Docking order in this panel runs bottom-up by child index, so the two new
@@ -243,8 +184,11 @@ public sealed class MainForm : Form
         // Report actions, raised by the pane so its toolbar can be restyled freely.
         _reportPane.CopyTextRequested += async (_, _) => await CopyFileContentsAsync(_lastResult?.TextPath);
         _reportPane.CopyJsonRequested += async (_, _) => await CopyFileContentsAsync(_lastResult?.JsonPath);
-        _reportPane.SaveTextRequested += (_, _) => SaveReportText();
-        _reportPane.SearchClipboardRequested += (_, _) => _tabs.Search(SafeClipboardText(), false);
+       _reportPane.SaveTextRequested += (_, _) => SaveReportText();
+        _reportPane.CopySummaryRequested += (_, _) => CopySummary();
+        _reportPane.OpenOutputRequested += (_, _) => OpenOutput();
+        _reportPane.CancelCollectionRequested += (_, _) => _collectionCts?.Cancel();
+       _reportPane.SearchClipboardRequested += (_, _) => _tabs.Search(SafeClipboardText(), false);
         _reportPane.SearchRequested += (text, newTab) => _tabs.Search(text, newTab);
 
         var statusStrip = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(18, 0, 18, 4) };
@@ -295,14 +239,14 @@ public sealed class MainForm : Form
     private void SelectIncidentInTimeline(Incident incident)
     {
         var row = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(item => ((Incident)item.Tag!).Id == incident.Id);
-        if (row is null && _timelineSearch.TextLength > 0)
+        if (row is null && !string.IsNullOrEmpty(_workspace.GetFilter().Search))
         {
-            _timelineSearch.Clear();
+            _workspace.ClearTimelineSearch();
             row = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(item => ((Incident)item.Tag!).Id == incident.Id);
         }
         if (row is null)
         {
-            _timelineRange.SelectedItem = "All time";
+            _workspace.SelectTimelineRange("All time");
             row = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(item => ((Incident)item.Tag!).Id == incident.Id);
         }
         if (row is null) return;
@@ -452,17 +396,27 @@ public sealed class MainForm : Form
             _retainedReportIncidents = await ReportHistoryReader.LoadIncidentsAsync(_settings.OutputRoot, CancellationToken.None);
             PopulateTimeline(); if (!_settings.IsTestDataMode) await IncidentDetector.MarkSuccessfulRunAsync(CancellationToken.None);
         }
-        catch (Exception ex) { _headline.Text = "Incident detection could not complete"; _incidentView.ShowEmpty(ex.Message); await _log.WriteAsync("error", "Startup detection failed", new { ex.Message }); }
+        catch (Exception ex) { _workspace.ShowTimelineSummary("Incident detection could not complete", ""); _incidentView.ShowEmpty(ex.Message); await _log.WriteAsync("error", "Startup detection failed", new { ex.Message }); }
     }
 
     private async Task CollectAsync()
     {
+        if (_collectionCts is not null) return;
         if (_timeline.SelectedItems.Count == 0) { MessageBox.Show(this, "Select an incident in the timeline first.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        await SaveSettingsAsync(showConfirmation: false); var incident = (Incident)_timeline.SelectedItems[0].Tag!;
-        _collectionCts = new(); ToggleCollecting(true); _evidenceView.Clear();
-        try
+       await SaveSettingsAsync(showConfirmation: false); var incident = (Incident)_timeline.SelectedItems[0].Tag!;
+       _collectionCts = new(); ToggleCollecting(true); _evidenceView.Clear();
+        _pages.SelectedIndex = 0;
+        _tabs.SelectTab(ReportTabIndex);
+        _reportPane.SetLoadingState(true, "Preparing focused evidence collection…");
+       try
         {
-            var progress = new Progress<CollectionProgress>(p => { _progress.Value = Math.Clamp(p.Percent, 0, 100); _progressText.Text = $"{p.Category}: {p.Message}"; AddOrUpdateEvidence(p.Category, p.State, p.Message); });
+            var progress = new Progress<CollectionProgress>(p =>
+            {
+                _progress.Value = Math.Clamp(p.Percent, 0, 100);
+                _progressText.Text = $"{p.Category}: {p.Message}";
+                _reportPane.SetLoadingState(true, $"{p.Category}: {p.Message}");
+                AddOrUpdateEvidence(p.Category, p.State, p.Message);
+            });
             var engine = new EvidenceCollectionEngine(new EventLogReader(), new SystemEvidenceCollector(), new FileEvidenceCollector(), new ReportWriter(), _log);
             // An elevated instance already has dump access, so the helper — and its
             // consent prompt — is skipped entirely.
@@ -475,7 +429,6 @@ public sealed class MainForm : Form
             _reportPane.SetActionsEnabled(true);
             var primaryDump = _lastResult.Report.DumpAnalyses.FirstOrDefault(item => item.Association.IsPrimaryForIncident);
             _rawView.SetOutput(primaryDump?.Dump.RawOutputPath is { } rawPath && File.Exists(rawPath) ? await File.ReadAllTextAsync(rawPath) : null);
-            _openOutput.Enabled = _copySummary.Enabled = true;
             _retainedReportIncidents = await ReportHistoryReader.LoadIncidentsAsync(_settings.OutputRoot, CancellationToken.None);
             UpdateMetrics();
             _tabs.SelectTab(ReportTabIndex);
@@ -483,30 +436,28 @@ public sealed class MainForm : Form
         }
         catch (OperationCanceledException) { _progressText.Text = "Collection cancelled. Partial files were left intact for inspection."; }
         catch (Exception ex) { _progressText.Text = "Collection failed: " + ex.Message; await _log.WriteAsync("error", "Collection failed", new { ex.Message }); MessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { ToggleCollecting(false); _collectionCts.Dispose(); _collectionCts = null; }
+        finally
+        {
+            _reportPane.SetLoadingState(false);
+            ToggleCollecting(false);
+            _collectionCts.Dispose();
+            _collectionCts = null;
+        }
     }
 
     private void PopulateTimeline()
     {
+        var selectedId = _timeline.SelectedItems.Count > 0 ? ((Incident)_timeline.SelectedItems[0].Tag!).Id : null;
         _timeline.Items.Clear();
         var referenceTime = _settings.IsTestDataMode && _incidents.Count > 0 ? _incidents.Max(x => x.Timestamp) : DateTimeOffset.Now;
         var range = SelectedTimelineRange();
-        bool MatchesType(Incident incident) => _timelineType.SelectedIndex switch
-        {
-            1 => true,
-            2 => incident.Kind == IncidentKind.ApplicationCrash,
-            3 => incident.Kind == IncidentKind.HardwareError,
-            _ => incident.Kind is IncidentKind.BugCheck or IncidentKind.UnexpectedShutdown or IncidentKind.PowerLossOrFreeze or IncidentKind.HardwareError
-        };
-        // Windows rolls the event log over quickly on a busy machine, so live
-        // detection alone loses older incidents. Retained collection reports are the
-        // durable history: merge them in, preferring the live record where both exist.
         var (allIncidents, retainedOnlyIds) = MergedIncidents();
-        var matchingType = allIncidents.Where(MatchesType).ToList();
-        var query = _timelineSearch.Text.Trim();
-        bool MatchesSearch(Incident item) => query.Length == 0 || string.Join(" ", item.Title, item.Summary, item.Source, item.BugCheckCode, CodeDecoder.DescribeIncident(item)).Contains(query, StringComparison.OrdinalIgnoreCase);
-        var inRange = matchingType.Where(x => x.Timestamp >= referenceTime - range && x.Timestamp <= referenceTime.AddMinutes(1)).ToList();
-        var visible = inRange.Where(MatchesSearch).OrderByDescending(x => x.Timestamp).ToList();
+        var filter = _workspace.GetFilter();
+        var result = IncidentQueryService.Query(allIncidents, filter, referenceTime);
+        var matchingType = result.MatchingType;
+        var inRange = result.InRange;
+        var visible = result.Visible;
+        var query = filter.Search.Trim();
         var recurrence = inRange.GroupBy(IncidentSignature, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
         foreach (var incident in visible)
         {
@@ -519,39 +470,24 @@ public sealed class MainForm : Form
             item.SubItems.Add(retainedOnlyIds.Contains(incident.Id) ? incident.Source + " • saved evidence" : incident.Source);
             _timeline.Items.Add(item);
         }
-        _timelineCount.Text = $"{visible.Count} shown · {matchingType.Count} matching · {allIncidents.Count} total ({_retainedReportIncidents.Count} saved report(s))";
+        var countText = $"{visible.Count} shown · {matchingType.Count} matching · {allIncidents.Count} total ({_retainedReportIncidents.Count} saved report(s))";
         // The headline must describe the range the user actually selected, or a
         // visible incident sits under a headline claiming there are none.
-        var rangeLabel = (_timelineRange.SelectedItem?.ToString() ?? "the selected range").Replace("Last ", "last ").Replace("Custom hours", $"last {range.TotalHours:0.#} hours");
+        var rangeLabel = (_workspace.GetFilter().Range ?? "the selected range").Replace("Last ", "last ").Replace("Custom hours", $"last {range.TotalHours:0.#} hours");
         var systemCount = visible.Count(x => x.Kind is IncidentKind.BugCheck or IncidentKind.UnexpectedShutdown or IncidentKind.PowerLossOrFreeze or IncidentKind.HardwareError);
-        _headline.Text = systemCount == 0 ? $"No system crash incidents in the {rangeLabel}" : $"{systemCount} system incident{(systemCount == 1 ? string.Empty : "s")} in the {rangeLabel}";
+        var headlineText = systemCount == 0 ? $"No system crash incidents in the {rangeLabel}" : $"{systemCount} system incident{(systemCount == 1 ? string.Empty : "s")} in the {rangeLabel}";
+        _workspace.ShowTimelineSummary(headlineText, countText);
         if (visible.Count == 0) _incidentView.ShowEmpty(query.Length > 0 ? $"No incidents match “{query}” in this range." : (allIncidents.Count == 0 ? "No matching crash evidence was found in the retained timeline." : "The immediate window is clear. Review past history to inspect older incidents."));
-        _history.Enabled = allIncidents.Any(x => x.Timestamp < referenceTime.AddHours(-1));
-        _collect.Enabled = visible.Count > 0; if (_timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
+        var selectedRow = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(row => ((Incident)row.Tag!).Id == selectedId);
+        if (selectedRow is not null) selectedRow.Selected = true;
+        else if (_timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
         UpdateMetrics();
         UpdateStatusBand();
     }
 
     // The immediate-history selector deliberately provides fine-grained hours
     // rather than forcing users to jump from one hour directly to a full day.
-    private TimeSpan SelectedTimelineRange() => _timelineRange.SelectedItem?.ToString() switch
-    {
-        "Last 30 minutes" => TimeSpan.FromMinutes(30),
-        "Last 2 hours" => TimeSpan.FromHours(2),
-        "Last 3 hours" => TimeSpan.FromHours(3),
-        "Last 6 hours" => TimeSpan.FromHours(6),
-        "Last 12 hours" => TimeSpan.FromHours(12),
-        "Last 24 hours" => TimeSpan.FromHours(24),
-        "Last 3 days" => TimeSpan.FromDays(3),
-        "Last 7 days" => TimeSpan.FromDays(7),
-        "Last 30 days" => TimeSpan.FromDays(30),
-        "Last 90 days" => TimeSpan.FromDays(90),
-        "Last 6 months" => TimeSpan.FromDays(183),
-        "Last year" => TimeSpan.FromDays(365),
-        "All time" => TimeSpan.FromDays(36500),
-        "Custom hours" => TimeSpan.FromHours((double)_customRangeHours.Value),
-        _ => TimeSpan.FromHours(1)
-    };
+    private TimeSpan SelectedTimelineRange() => _workspace.GetFilter().Duration;
 
     /// <summary>
     /// Live event-log detections plus saved reports the live window no longer covers.
@@ -570,7 +506,7 @@ public sealed class MainForm : Form
         var range = SelectedTimelineRange();
         var merged = MergedIncidents().All;
         var snapshot = CrashMetricsCalculator.Build(merged, _retainedReportIncidents, referenceTime - range, referenceTime, _newIncidentIds, merged);
-        _metrics.SetMetrics(snapshot, _timelineRange.SelectedItem?.ToString() ?? "Selected range");
+        _metrics.SetMetrics(snapshot, _workspace.GetFilter().Range ?? "Selected range");
     }
     /// <summary>
     /// Refreshes the always-visible band. Cheap by design: it reads the incident
@@ -600,7 +536,6 @@ public sealed class MainForm : Form
         var merged = MergedIncidents().All;
         var related = merged.Count(other => other.Id != i.Id && IncidentSignature(other).Equals(IncidentSignature(i), StringComparison.OrdinalIgnoreCase));
         _incidentView.ShowIncident(i, _retainedReportIncidents.Any(saved => saved.Id == i.Id), related);
-        _collect.Enabled = true;
     }
 
     private static string IncidentSignature(Incident incident)
@@ -617,7 +552,10 @@ public sealed class MainForm : Form
     private void AddOrUpdateEvidence(string category, EvidenceState state, string detail) => _evidenceView.AddOrUpdate(category, state, detail);
     private async Task SaveSettingsAsync(bool showConfirmation = true) { _settings.MinutesBefore = (int)_before.Value; _settings.MinutesAfterStartup = (int)_after.Value; _settings.AnalyzeCrashDumps = _analyzeDumps.Checked; _settings.DebuggerTimeoutSeconds = (int)_debuggerTimeout.Value; _settings.IncludeFullMemoryDump = _fullDump.Checked; _settings.RedactAccountName = _redact.Checked; _settings.LookUpInstalledProgramsOnline = _webLookup.Checked; _settings.StartMonitoringOnLaunch = _monitorAutoStart.Checked; _settings.AlwaysRunElevated = _alwaysElevate.Checked; _settings.OutputRoot = _output.Text.Trim(); if (_startWithWindows.Checked != StartupRegistration.IsEnabled() && StartupRegistration.SetEnabled(_startWithWindows.Checked) is { } startupError) { MessageBox.Show(this, "The start-with-Windows entry could not be updated: " + startupError, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); _startWithWindows.Checked = StartupRegistration.IsEnabled(); } _settings.TestDataDirectory = _testMode.Checked ? _testData.Text.Trim() : null; await SettingsStore.SaveAsync(_settings); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; if (showConfirmation) MessageBox.Show(this, "Settings saved. Restart the app to re-run incident detection with a changed data source.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
     private void LoadSettingsControls() { _before.Value = Math.Clamp(_settings.MinutesBefore, 1, 1440); _after.Value = Math.Clamp(_settings.MinutesAfterStartup, 1, 1440); _analyzeDumps.Checked = _settings.AnalyzeCrashDumps; _debuggerTimeout.Value = Math.Clamp(_settings.DebuggerTimeoutSeconds, 15, 1800); _fullDump.Checked = _settings.IncludeFullMemoryDump; _redact.Checked = _settings.RedactAccountName; _webLookup.Checked = _settings.LookUpInstalledProgramsOnline; _monitorAutoStart.Checked = _settings.StartMonitoringOnLaunch; _alwaysElevate.Checked = _settings.AlwaysRunElevated; _startWithWindows.Checked = StartupRegistration.IsEnabled(); _output.Text = _settings.OutputRoot; _testMode.Checked = _settings.IsTestDataMode; _testData.Text = _settings.TestDataDirectory ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData")); _modeBanner.Visible = _settings.IsTestDataMode; _modeBanner.Text = _settings.IsTestDataMode ? "TEST-DATA MODE — reading copied sample logs only" : string.Empty; }
-    private void ToggleCollecting(bool collecting) { _collect.Enabled = !collecting && _timeline.SelectedItems.Count > 0; _cancel.Enabled = collecting; }
+    private void ToggleCollecting(bool collecting)
+    {
+        _reportPane.SetCollectionActions(_lastResult is not null, collecting);
+    }
     private void OpenOutput() { if (_lastResult is not null) Process.Start(new ProcessStartInfo("explorer.exe", _lastResult.OutputDirectory) { UseShellExecute = true }); }
     private void CopySummary() { if (_lastResult is null) return; var report = _lastResult.Report; Clipboard.SetText($"{report.Incident.Title} at {report.Incident.Timestamp:F}\r\nMeaning: {CodeDecoder.DescribeIncident(report.Incident)}\r\nDecoded codes: {string.Join(" | ", report.CodeInterpretations.Select(x => $"{x.RawValue} = {x.Name}").Take(8))}\r\nObservations: {string.Join(" | ", report.Observations.Select(x => x.Detail))}\r\nArchive: {_lastResult.ZipPath}"); }
     private async Task CopyFileContentsAsync(string? path)

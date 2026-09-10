@@ -9,7 +9,8 @@ namespace CrashEvidenceCollector.App.Views;
 /// </summary>
 public partial class ReadableReportView : UserControl
 {
-    private readonly ReportView _report = new() { Dock = DockStyle.Fill };
+   private readonly ReportView _report = new() { Dock = DockStyle.Fill };
+    private readonly ReportLoadingView _loading = new();
 
     /// <summary>Selected text the reader asked to look up; true when a new tab was requested.</summary>
     public event Action<string, bool>? SearchRequested;
@@ -17,18 +18,27 @@ public partial class ReadableReportView : UserControl
     public event EventHandler? CopyJsonRequested;
     public event EventHandler? SaveTextRequested;
     public event EventHandler? SearchClipboardRequested;
+    public event EventHandler? CopySummaryRequested;
+    public event EventHandler? OpenOutputRequested;
+    public event EventHandler? CancelCollectionRequested;
 
     public ReadableReportView()
     {
-        InitializeComponent();
-        reportHost.Controls.Add(_report);
-        _report.SearchRequested += (text, newTab) => SearchRequested?.Invoke(text, newTab);
+       InitializeComponent();
+       reportHost.Controls.Add(_report);
+        reportHost.Controls.Add(_loading);
+        _loading.BringToFront();
+      _report.SearchRequested += (text, newTab) => SearchRequested?.Invoke(text, newTab);
+        copySummaryButton.Click += (s, e) => CopySummaryRequested?.Invoke(s, e);
+        openOutputButton.Click += (s, e) => OpenOutputRequested?.Invoke(s, e);
+        cancelCollectionButton.Click += (s, e) => CancelCollectionRequested?.Invoke(s, e);
         copyTextButton.Click += (s, e) => CopyTextRequested?.Invoke(s, e);
         copyJsonButton.Click += (s, e) => CopyJsonRequested?.Invoke(s, e);
         saveTextButton.Click += (s, e) => SaveTextRequested?.Invoke(s, e);
         searchButton.Click += (s, e) => SearchClipboardRequested?.Invoke(s, e);
         printButton.Click += (_, _) => Print();
-        SetActionsEnabled(false);
+       SetActionsEnabled(false);
+        SetCollectionActions(false, false);
         _report.ShowHtml(WelcomeHtml);
     }
 
@@ -55,9 +65,25 @@ without leaving the application.</p>
 </div></body></html>
 """;
 
+    /// <summary>Shows or hides the live collection state over the report surface.</summary>
+    public void SetLoadingState(bool loading, string? message = null)
+    {
+        if (loading) _loading.ShowProgress(message ?? "Preparing collection…");
+        else _loading.HideProgress();
+    }
+
     /// <summary>Report actions stay disabled until a report exists to act on.</summary>
-    public void SetActionsEnabled(bool enabled)
+   public void SetActionsEnabled(bool enabled)
         => copyTextButton.Enabled = copyJsonButton.Enabled = saveTextButton.Enabled = printButton.Enabled = enabled;
+
+    /// <summary>Collection actions stay contextual; cancellation exists only while work is active.</summary>
+    public void SetCollectionActions(bool hasReport, bool collecting)
+    {
+        copySummaryButton.Enabled = hasReport;
+        openOutputButton.Enabled = hasReport;
+        cancelCollectionButton.Visible = collecting;
+        cancelCollectionButton.Enabled = collecting;
+    }
 
     public void ShowReportFile(string path) => _report.ShowReportFile(path);
     public void ShowHtml(string html) => _report.ShowHtml(html);

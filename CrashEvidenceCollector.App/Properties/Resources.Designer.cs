@@ -63,6 +63,36 @@ namespace CrashEvidenceCollector.App.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap UIPaste_High_Green40Px {
+            get {
+                object obj = ResourceManager.GetObject("UIPaste_High_Green40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap UIPaste_High40Px {
+            get {
+                object obj = ResourceManager.GetObject("UIPaste_High40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap UIPaste40Px {
+            get {
+                object obj = ResourceManager.GetObject("UIPaste40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap UiPicsBack_High_Green40Px {
             get {
                 object obj = ResourceManager.GetObject("UiPicsBack_High_Green40Px", resourceCulture);
@@ -176,6 +206,36 @@ namespace CrashEvidenceCollector.App.Properties {
         internal static System.Drawing.Bitmap UiPicsRefresh_Norm40Px {
             get {
                 object obj = ResourceManager.GetObject("UiPicsRefresh_Norm40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap UiPicsSearch_High_Green40Px {
+            get {
+                object obj = ResourceManager.GetObject("UiPicsSearch_High_Green40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap UiPicsSearch_High40Px {
+            get {
+                object obj = ResourceManager.GetObject("UiPicsSearch_High40Px", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap UiPicsSearch_Norm40Px {
+            get {
+                object obj = ResourceManager.GetObject("UiPicsSearch_Norm40Px", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

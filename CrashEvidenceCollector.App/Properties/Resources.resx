@@ -118,11 +118,23 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <assembly alias="System.Windows.Forms" name="System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
+  <data name="UiPicsSearch_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UiPicsSearch_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="UiPicsRefresh_High_Green40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UiPicsRefresh_High_Green40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="UiPicsRefresh_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiPicsRefresh_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="UiSetCopy_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiSetCopy_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="UiPicsSearch_High_Green40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UiPicsSearch_High_Green40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="UiPicsSearch_Norm40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UiPicsSearch_Norm40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="UiPicsGoGreen40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiPicsGoGreen40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -135,6 +147,9 @@
   </data>
   <data name="UiPicsGoGreen_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiPicsGoGreen_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="UIPaste_High_Green40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UIPaste_High_Green40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="UiSetBack_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiSetBack_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -154,10 +169,13 @@
   <data name="UiPicsBack_Norm-copy40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiPicsBack_Norm-copy40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="UIPaste40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UIPaste40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="UiPicsRefresh_Norm40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UiPicsRefresh_Norm40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="UiPicsRefresh_High_Green40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\UiPicsRefresh_High_Green40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  <data name="UIPaste_High40Px" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\UIPaste_High40Px.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
 </root>

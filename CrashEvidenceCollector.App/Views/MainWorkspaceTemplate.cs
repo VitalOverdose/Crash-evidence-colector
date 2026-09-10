@@ -27,10 +27,5 @@ public partial class MainWorkspaceTemplate : UserControl
     /// <summary>Incident list on the left; the splitter keeps it resizable.</summary>
     public ListView TimelineList => timelineList;
 
-    public Label HeadlineLabel => headlineLabel;
-    public ComboBox RangeBox => rangeBox;
-    public ComboBox TypeBox => typeBox;
-    public NumericUpDown CustomHours => customHours;
-    public Label CountLabel => countLabel;
     public SplitContainer WorkspaceSplitter => workspaceSplitter;
 }

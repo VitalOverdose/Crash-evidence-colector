@@ -25,10 +25,12 @@ internal sealed class StatusBandView : Control
     private MachineStatusSnapshot? _status;
     private readonly ToolTip _tips = new() { AutoPopDelay = 20000, InitialDelay = 350, ReshowDelay = 120 };
     private Rectangle _attentionBounds = Rectangle.Empty;
+    private Rectangle _lastSevenDaysBounds = Rectangle.Empty;
     private string _lastTip = string.Empty;
 
     /// <summary>Raised when the attention chip is clicked, so the shell can open what matters.</summary>
     public event Action? AttentionClicked;
+    public event Action? LastSevenDaysClicked;
 
     public StatusBandView()
     {
@@ -52,13 +54,14 @@ internal sealed class StatusBandView : Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        Cursor = _attentionBounds.Contains(e.Location) ? Cursors.Hand : Cursors.Default;
+        Cursor = _attentionBounds.Contains(e.Location) || _lastSevenDaysBounds.Contains(e.Location) ? Cursors.Hand : Cursors.Default;
     }
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
         if (_attentionBounds.Contains(e.Location)) AttentionClicked?.Invoke();
+        else if (_lastSevenDaysBounds.Contains(e.Location)) LastSevenDaysClicked?.Invoke();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -75,6 +78,7 @@ internal sealed class StatusBandView : Control
         using (var edge = new Pen(UiTheme.Border)) g.DrawLine(edge, 0, Height - 1, Width, Height - 1);
 
         var x = 18;
+        _lastSevenDaysBounds = Rectangle.Empty;
         TextRenderer.DrawText(g, "STATUS", LabelFont, new Point(x, 14), UiTheme.Faint);
         var healthText = MachineStatusBuilder.HealthLabel(health);
         TextRenderer.DrawText(g, healthText, HealthFont, new Point(x - 1, 28), accent);
@@ -87,6 +91,8 @@ internal sealed class StatusBandView : Control
             TextRenderer.DrawText(g, reading.Value, ValueFont, new Point(x - 1, 29), SeverityColor(reading.Severity));
             var width = Math.Max(TextRenderer.MeasureText(reading.Label.ToUpperInvariant(), LabelFont).Width,
                                  TextRenderer.MeasureText(reading.Value, ValueFont).Width);
+            if (reading.Label.Equals("Last 7 days", StringComparison.OrdinalIgnoreCase))
+                _lastSevenDaysBounds = new Rectangle(x - 6, 8, width + 12, Height - 16);
             x += width + 30;
         }
 

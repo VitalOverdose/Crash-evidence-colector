@@ -12,8 +12,11 @@ partial class ReadableReportView
 
     private void InitializeComponent()
     {
-        toolbarRow = new FlowLayoutPanel();
-        copyTextButton = new Button();
+       toolbarRow = new FlowLayoutPanel();
+        copySummaryButton = new Button();
+        openOutputButton = new Button();
+        cancelCollectionButton = new Button();
+       copyTextButton = new Button();
         copyJsonButton = new Button();
         saveTextButton = new Button();
         printButton = new Button();
@@ -28,7 +31,10 @@ partial class ReadableReportView
         // VirtualModernButtons. Behaviour is bound to the fields, not the layout.
         //
         toolbarRow.Controls.Add(copyTextButton);
-        toolbarRow.Controls.Add(copyJsonButton);
+        toolbarRow.Controls.Add(copySummaryButton);
+        toolbarRow.Controls.Add(cancelCollectionButton);
+        toolbarRow.Controls.Add(openOutputButton);
+       toolbarRow.Controls.Add(copyJsonButton);
         toolbarRow.Controls.Add(saveTextButton);
         toolbarRow.Controls.Add(printButton);
         toolbarRow.Controls.Add(searchButton);
@@ -38,9 +44,27 @@ partial class ReadableReportView
         toolbarRow.Padding = new Padding(6);
         toolbarRow.Size = new Size(780, 48);
         toolbarRow.TabIndex = 0;
-        toolbarRow.WrapContents = true;
+       toolbarRow.WrapContents = true;
+       //
+        // collection action buttons
         //
-        // toolbar buttons
+        copySummaryButton.AutoSize = true;
+        copySummaryButton.Name = "copySummaryButton";
+        copySummaryButton.TabIndex = 0;
+        copySummaryButton.Text = "Copy summary";
+        copySummaryButton.UseVisualStyleBackColor = true;
+        openOutputButton.AutoSize = true;
+        openOutputButton.Name = "openOutputButton";
+        openOutputButton.TabIndex = 1;
+        openOutputButton.Text = "Open output folder";
+        openOutputButton.UseVisualStyleBackColor = true;
+        cancelCollectionButton.AutoSize = true;
+        cancelCollectionButton.Name = "cancelCollectionButton";
+        cancelCollectionButton.TabIndex = 2;
+        cancelCollectionButton.Text = "Cancel collection";
+        cancelCollectionButton.UseVisualStyleBackColor = true;
+        //
+       // toolbar buttons
         //
         copyTextButton.AutoSize = true;
         copyTextButton.Name = "copyTextButton";
@@ -96,6 +120,9 @@ partial class ReadableReportView
     }
 
     private FlowLayoutPanel toolbarRow;
+    private Button copySummaryButton;
+    private Button openOutputButton;
+    private Button cancelCollectionButton;
     private Button copyTextButton;
     private Button copyJsonButton;
     private Button saveTextButton;
