@@ -148,7 +148,7 @@ partial class MainWorkspaceTemplate
         vStackRule6.CollapsedHeight = 179;
         vStackRule6.ControlName = "timelineList";
         vStackRule6.ExpandedHeight = 541;
-        vStackRule6.FontBaselineSizeInPoints = 9F;
+        vStackRule6.FontBaselineSizeInPoints = 11F;
         vStackRule6.HasCustomCollapsedHeight = true;
         vStackRule6.Id = "c35a36f45a114c2ea33777245f403e47";
         vStackRule6.SpecialLayout = ProfessorSnowsVideoDownloader.CustomControls.VStackSpecialLayout.Spring;
@@ -256,6 +256,7 @@ partial class MainWorkspaceTemplate
         // 
         timelineList.BorderStyle = BorderStyle.None;
         timelineList.Columns.AddRange(new ColumnHeader[] { whenColumn, typeColumn, codeColumn, meaningColumn, sourceColumn });
+        timelineList.Font = new Font("Segoe UI", 11F);
         timelineList.FullRowSelect = true;
         timelineList.Location = new Point(9, 203);
         timelineList.Name = "timelineList";
