@@ -9,7 +9,7 @@ namespace CrashEvidenceCollector.App.Views;
 internal sealed class IncidentComparisonView : UserControl
 {
     private readonly FlowLayoutPanel _cards = new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(14, 8, 14, 14) };
-    private readonly Label _status = new() { AutoSize = true, ForeColor = UiTheme.Muted, Padding = new Padding(10, 10, 0, 0) };
+    private readonly Label _status = new() { Dock = DockStyle.Top, Height = 28, AutoEllipsis = true, ForeColor = UiTheme.Muted };
     private readonly List<Incident> _incidents = [];
 
     /// <summary>How many incidents the board holds. Adding more drops the oldest.</summary>
@@ -19,13 +19,18 @@ internal sealed class IncidentComparisonView : UserControl
     {
         Dock = DockStyle.Fill;
         BackColor = UiTheme.Canvas;
-        var header = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = UiTheme.Surface, Padding = new Padding(18, 10, 18, 8) };
+        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiTheme.Surface, Padding = new Padding(18, 10, 18, 10) };
         var clear = UiTheme.ActionButton("Clear board");
-        clear.Dock = DockStyle.Right;
         clear.Click += (_, _) => { _incidents.Clear(); Render(); };
-        header.Controls.Add(clear);
+        // The action gets its own right-hand column so it never overlaps the title or
+        // status, and keeps its natural height instead of stretching to the header's.
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Padding = new Padding(12, 4, 0, 0), BackColor = UiTheme.Surface };
+        actions.Controls.Add(clear);
+        // Docking runs from the last control added: the action column first, then the
+        // title across the top, then the status line beneath it.
         header.Controls.Add(_status);
-        header.Controls.Add(new Label { Dock = DockStyle.Top, Height = 26, Text = "Incident comparison board", Font = new Font("Segoe UI Semibold", 15f), ForeColor = UiTheme.Ink });
+        header.Controls.Add(new Label { Dock = DockStyle.Top, Height = 38, Text = "Incident comparison board", Font = new Font("Segoe UI Semibold", 15f), ForeColor = UiTheme.InkStrong, AutoEllipsis = true });
+        header.Controls.Add(actions);
         Controls.Add(_cards);
         Controls.Add(header);
         Render();
@@ -54,7 +59,7 @@ internal sealed class IncidentComparisonView : UserControl
 
     private Control BuildCard(Incident incident)
     {
-        var card = new Panel { Width = 335, Height = 330, BackColor = UiTheme.Surface, Margin = new Padding(6), Padding = new Padding(18) };
+        var card = new Panel { Width = 390, Height = 440, BackColor = UiTheme.Surface, Margin = new Padding(8), Padding = new Padding(18) };
         var stripe = new Panel { Dock = DockStyle.Top, Height = 4, BackColor = UiTheme.KindColor(incident.Kind) };
         var open = UiTheme.ActionButton("Open in timeline", true);
         open.Dock = DockStyle.Bottom;

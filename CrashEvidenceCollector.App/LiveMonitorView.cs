@@ -33,7 +33,7 @@ internal sealed class LiveMonitorView : UserControl
         _events.Columns.Add("Time", 130); _events.Columns.Add("Source / ID", 210); _events.Columns.Add("Hardware event", 560);
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, BackColor = BackColor };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
@@ -193,8 +193,8 @@ internal sealed class MonitorLineChart(string title, string unit) : MetricsChart
     {
         base.OnPaint(e);
         var bounds = ClientRectangle; bounds.Inflate(-14, -10);
-        Title(e.Graphics, title, new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
-        var plot = new Rectangle(bounds.X + 34, bounds.Y + 30, Math.Max(10, bounds.Width - 40), Math.Max(10, bounds.Height - 56));
+        Title(e.Graphics, title, new Rectangle(bounds.X, bounds.Y, bounds.Width, 26));
+        var plot = new Rectangle(bounds.X + 46, bounds.Y + 58, Math.Max(10, bounds.Width - 52), Math.Max(10, bounds.Height - 86));
         var known = _primary.Concat(_secondary).Where(point => point.Value is not null).Select(point => point.Value!.Value).ToList();
         if (known.Count == 0) { Empty(e.Graphics, plot, "No sensor values yet. Start monitoring, and enable the HWiNFO gadget for temperature/voltage/pump sensors."); return; }
 
@@ -206,9 +206,9 @@ internal sealed class MonitorLineChart(string title, string unit) : MetricsChart
         {
             var y = plot.Bottom - line * plot.Height / 4;
             e.Graphics.DrawLine(gridPen, plot.Left, y, plot.Right, y);
-            TextRenderer.DrawText(e.Graphics, $"{minimum + (maximum - minimum) * line / 4:0}", ChartTinyFont, new Rectangle(bounds.X, y - 8, 32, 16), Muted, TextFormatFlags.Right);
+            TextRenderer.DrawText(e.Graphics, $"{minimum + (maximum - minimum) * line / 4:0}", ChartTinyFont, new Rectangle(bounds.X, y - 10, 42, 20), Muted, TextFormatFlags.Right);
         }
-        TextRenderer.DrawText(e.Graphics, unit, ChartTinyFont, new Rectangle(bounds.X, bounds.Y + 4, 32, 16), Muted, TextFormatFlags.Right);
+        TextRenderer.DrawText(e.Graphics, unit, ChartTinyFont, new Rectangle(bounds.X, plot.Top - 24, 42, 20), Muted, TextFormatFlags.Right);
 
         var window = _primary.Count > 1 ? (_primary[^1].Time - _primary[0].Time).TotalSeconds : 1;
         if (window <= 0) window = 1;
@@ -223,8 +223,8 @@ internal sealed class MonitorLineChart(string title, string unit) : MetricsChart
         DrawSeries(e.Graphics, _secondary, SeriesColors[1], X, Y);
         if (_primary.Count > 1)
         {
-            TextRenderer.DrawText(e.Graphics, _primary[0].Time.ToLocalTime().ToString("HH:mm:ss"), ChartTinyFont, new Rectangle(plot.Left, plot.Bottom + 3, 80, 16), Muted, TextFormatFlags.Left);
-            TextRenderer.DrawText(e.Graphics, _primary[^1].Time.ToLocalTime().ToString("HH:mm:ss"), ChartTinyFont, new Rectangle(plot.Right - 80, plot.Bottom + 3, 80, 16), Muted, TextFormatFlags.Right);
+            TextRenderer.DrawText(e.Graphics, _primary[0].Time.ToLocalTime().ToString("HH:mm:ss"), ChartTinyFont, new Rectangle(plot.Left, plot.Bottom + 4, 100, 20), Muted, TextFormatFlags.Left);
+            TextRenderer.DrawText(e.Graphics, _primary[^1].Time.ToLocalTime().ToString("HH:mm:ss"), ChartTinyFont, new Rectangle(plot.Right - 100, plot.Bottom + 4, 100, 20), Muted, TextFormatFlags.Right);
         }
     }
 

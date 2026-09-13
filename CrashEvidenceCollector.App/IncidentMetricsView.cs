@@ -20,7 +20,7 @@ internal sealed class IncidentMetricsView : UserControl
     private readonly IncidentTypeDonut _types = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly TopBugCheckChart _codes = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly TopApplicationChart _applications = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
-    private readonly Label _patternTitle = new() { Dock = DockStyle.Top, Height = 25, Font = new Font("Segoe UI Semibold", 11f), ForeColor = UiTheme.Ink };
+    private readonly Label _patternTitle = new() { Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI Semibold", 11f), ForeColor = UiTheme.Ink };
     private readonly Label _patternDetail = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), ForeColor = UiTheme.Muted, AutoEllipsis = true };
 
     public IncidentMetricsView()
@@ -31,7 +31,7 @@ internal sealed class IncidentMetricsView : UserControl
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = BackColor };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1, Margin = Padding.Empty };
@@ -130,21 +130,21 @@ internal sealed class TopApplicationChart : MetricsChart
     {
         base.OnPaint(e);
         var bounds = ClientRectangle; bounds.Inflate(-12, -9);
-        Title(e.Graphics, "Repeat application failures", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
-        var chart = new Rectangle(bounds.X, bounds.Y + 28, bounds.Width, bounds.Height - 32);
+        Title(e.Graphics, "Repeat application failures", new Rectangle(bounds.X, bounds.Y, bounds.Width, 26));
+        var chart = new Rectangle(bounds.X, bounds.Y + 34, bounds.Width, bounds.Height - 38);
         if (_data.Count == 0) { Empty(e.Graphics, chart, "No application crashes in history."); return; }
         var maximum = Math.Max(1, _data.Max(item => item.Value));
-        var rowHeight = Math.Max(18, chart.Height / Math.Max(1, _data.Count));
+        var rowHeight = Math.Max(26, chart.Height / Math.Max(1, _data.Count));
         var labelWidth = Math.Clamp(chart.Width * 52 / 100, 80, 210);
         for (var index = 0; index < _data.Count; index++)
         {
             var item = _data[index]; var y = chart.Y + index * rowHeight;
             var emphasis = index == 0 && item.Value > 1 ? UiTheme.Danger : Navy;
             TextRenderer.DrawText(e.Graphics, item.Label, ChartTextFont, new Rectangle(chart.X, y, labelWidth - 5, rowHeight), emphasis, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 28) * item.Value / maximum), Math.Max(7, rowHeight - 10));
+            var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 44) * item.Value / maximum), Math.Max(7, rowHeight - 10));
             using var brush = new SolidBrush(index == 0 && item.Value > 1 ? UiTheme.Danger : UiTheme.Accent);
             e.Graphics.FillRectangle(brush, bar);
-            TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 24, rowHeight), Muted, TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 40, rowHeight), Muted, TextFormatFlags.VerticalCenter);
         }
     }
 }
@@ -154,10 +154,10 @@ internal abstract class MetricsChart : Control
     protected static Color Navy => UiTheme.InkStrong;
     protected static Color Muted => UiTheme.Muted;
     protected static Color Grid => UiTheme.Border;
-    protected static readonly Font ChartTitleFont = new("Segoe UI Semibold", 11);
-    protected static readonly Font ChartTextFont = new("Segoe UI", 9f);
-    protected static readonly Font ChartTinyFont = new("Segoe UI", 9f);
-    protected static readonly Font ChartValueFont = new("Segoe UI Semibold", 12);
+    protected static readonly Font ChartTitleFont = new("Segoe UI Semibold", 12);
+    protected static readonly Font ChartTextFont = new("Segoe UI", 11f);
+    protected static readonly Font ChartTinyFont = new("Segoe UI", 11f);
+    protected static readonly Font ChartValueFont = new("Segoe UI Semibold", 16);
     protected static Color[] SeriesColors => [UiTheme.Accent, UiTheme.Warning, UiTheme.Danger, UiTheme.Success];
 
     protected MetricsChart()
@@ -172,7 +172,7 @@ internal abstract class MetricsChart : Control
         => TextRenderer.DrawText(graphics, title, ChartTitleFont, bounds, Navy, TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.EndEllipsis);
 
     protected static void Empty(Graphics graphics, Rectangle bounds, string text)
-        => TextRenderer.DrawText(graphics, text, SystemFonts.MessageBoxFont, bounds, Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+        => TextRenderer.DrawText(graphics, text, ChartTextFont, bounds, Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -207,9 +207,9 @@ internal sealed class DailyIncidentChart : MetricsChart
         base.OnPaint(e);
         var bounds = ClientRectangle;
         bounds.Inflate(-14, -10);
-        Title(e.Graphics, $"Daily incident types - last {_data.Count} days (click a day)", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
-        DrawLegend(e.Graphics, new Rectangle(bounds.X, bounds.Y + 23, bounds.Width, 20));
-        var plot = new Rectangle(bounds.X + 28, bounds.Y + 50, Math.Max(10, bounds.Width - 34), Math.Max(10, bounds.Height - 76));
+        Title(e.Graphics, $"Daily incident types - last {_data.Count} days (click a day)", new Rectangle(bounds.X, bounds.Y, bounds.Width, 26));
+        DrawLegend(e.Graphics, new Rectangle(bounds.X, bounds.Y + 30, bounds.Width, 24));
+        var plot = new Rectangle(bounds.X + 38, bounds.Y + 62, Math.Max(10, bounds.Width - 44), Math.Max(10, bounds.Height - 92));
         if (_data.Count == 0) { Empty(e.Graphics, plot, "No daily incident history is available."); return; }
 
         var maximum = Math.Max(1, _data.Max(item => item.Total));
@@ -218,7 +218,7 @@ internal sealed class DailyIncidentChart : MetricsChart
         {
             var y = plot.Bottom - line * plot.Height / 2;
             e.Graphics.DrawLine(gridPen, plot.Left, y, plot.Right, y);
-            TextRenderer.DrawText(e.Graphics, (maximum * line / 2d).ToString("0"), ChartTextFont, new Rectangle(bounds.X, y - 8, 25, 16), Muted, TextFormatFlags.Right);
+            TextRenderer.DrawText(e.Graphics, (maximum * line / 2d).ToString("0"), ChartTextFont, new Rectangle(bounds.X, y - 10, 34, 20), Muted, TextFormatFlags.Right);
         }
 
         var slot = plot.Width / (float)_data.Count;
@@ -240,8 +240,9 @@ internal sealed class DailyIncidentChart : MetricsChart
                 e.Graphics.FillRectangle(brush, x, bottom, barWidth, height);
             }
             var labelEvery = Math.Max(1, _data.Count / 7);
-            if (index % labelEvery == 0 || index == _data.Count - 1)
-                TextRenderer.DrawText(e.Graphics, item.Label, ChartTinyFont, new Rectangle((int)(x - slot / 2), plot.Bottom + 3, (int)(slot * 2), 18), Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
+            // The final day is always labelled; a regular label too close to it is dropped so they never overlap.
+            if ((index % labelEvery == 0 && _data.Count - 1 - index >= Math.Max(1, labelEvery / 2)) || index == _data.Count - 1)
+                TextRenderer.DrawText(e.Graphics, item.Label, ChartTinyFont, new Rectangle((int)(x - slot / 2), plot.Bottom + 4, (int)(slot * 2), 22), Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
         }
     }
 
@@ -252,11 +253,11 @@ internal sealed class DailyIncidentChart : MetricsChart
         for (var index = 0; index < labels.Length; index++)
         {
             using var brush = new SolidBrush(SeriesColors[index]);
-            graphics.FillRectangle(brush, x, bounds.Y + 4, 10, 10);
+            graphics.FillRectangle(brush, x, bounds.Y + 5, 12, 12);
             var width = TextRenderer.MeasureText(labels[index], ChartTextFont).Width;
-            TextRenderer.DrawText(graphics, labels[index], ChartTextFont, new Point(x + 13, bounds.Y), Muted);
-            x += width + 20;
-            if (x > bounds.Right - 80) break;
+            TextRenderer.DrawText(graphics, labels[index], ChartTextFont, new Point(x + 16, bounds.Y), Muted);
+            x += width + 28;
+            if (x > bounds.Right - 120) break;
         }
     }
 }
@@ -272,11 +273,11 @@ internal sealed class IncidentTypeDonut : MetricsChart
     {
         base.OnPaint(e);
         var bounds = ClientRectangle; bounds.Inflate(-12, -9);
-        Title(e.Graphics, $"Incident mix · {_range}", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
+        Title(e.Graphics, $"Incident mix · {_range}", new Rectangle(bounds.X, bounds.Y, bounds.Width, 26));
         var total = _data.Sum(item => item.Value);
-        if (total == 0) { Empty(e.Graphics, new Rectangle(bounds.X, bounds.Y + 24, bounds.Width, bounds.Height - 24), "No incidents in this range."); return; }
-        var diameter = Math.Max(44, Math.Min(bounds.Height - 38, bounds.Width / 2 - 12));
-        var pie = new Rectangle(bounds.X + 4, bounds.Y + 30, diameter, diameter);
+        if (total == 0) { Empty(e.Graphics, new Rectangle(bounds.X, bounds.Y + 30, bounds.Width, bounds.Height - 30), "No incidents in this range."); return; }
+        var diameter = Math.Max(44, Math.Min(bounds.Height - 46, bounds.Width / 2 - 12));
+        var pie = new Rectangle(bounds.X + 4, bounds.Y + 38, diameter, diameter);
         var start = -90f;
         for (var index = 0; index < _data.Count; index++)
         {
@@ -287,15 +288,15 @@ internal sealed class IncidentTypeDonut : MetricsChart
             start += sweep;
         }
         var inner = pie; inner.Inflate(-diameter / 4, -diameter / 4);
-        e.Graphics.FillEllipse(Brushes.White, inner);
+        using (var hole = new SolidBrush(BackColor)) e.Graphics.FillEllipse(hole, inner);
         TextRenderer.DrawText(e.Graphics, total.ToString("N0"), ChartValueFont, inner, Navy, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        var legendX = pie.Right + 10; var y = bounds.Y + 31;
+        var legendX = pie.Right + 14; var y = bounds.Y + 38;
         for (var index = 0; index < _data.Count; index++)
         {
             using var brush = new SolidBrush(SeriesColors[index % SeriesColors.Length]);
-            e.Graphics.FillRectangle(brush, legendX, y + 4, 9, 9);
-            TextRenderer.DrawText(e.Graphics, $"{_data[index].Label}: {_data[index].Value}", ChartTextFont, new Rectangle(legendX + 13, y, Math.Max(20, bounds.Right - legendX - 13), 18), Muted, TextFormatFlags.EndEllipsis);
-            y += 19;
+            e.Graphics.FillRectangle(brush, legendX, y + 6, 11, 11);
+            TextRenderer.DrawText(e.Graphics, $"{_data[index].Label}: {_data[index].Value}", ChartTextFont, new Rectangle(legendX + 16, y, Math.Max(20, bounds.Right - legendX - 16), 22), Muted, TextFormatFlags.EndEllipsis);
+            y += 24;
         }
     }
 }
@@ -309,20 +310,20 @@ internal sealed class TopBugCheckChart : MetricsChart
     {
         base.OnPaint(e);
         var bounds = ClientRectangle; bounds.Inflate(-12, -9);
-        Title(e.Graphics, "Top bugchecks · retained history", new Rectangle(bounds.X, bounds.Y, bounds.Width, 22));
-        var chart = new Rectangle(bounds.X, bounds.Y + 28, bounds.Width, bounds.Height - 32);
+        Title(e.Graphics, "Top bugchecks · retained history", new Rectangle(bounds.X, bounds.Y, bounds.Width, 26));
+        var chart = new Rectangle(bounds.X, bounds.Y + 34, bounds.Width, bounds.Height - 38);
         if (_data.Count == 0) { Empty(e.Graphics, chart, "Collect a bugcheck report to build retained history."); return; }
         var maximum = Math.Max(1, _data.Max(item => item.Value));
-        var rowHeight = Math.Max(18, chart.Height / Math.Max(1, _data.Count));
+        var rowHeight = Math.Max(26, chart.Height / Math.Max(1, _data.Count));
         var labelWidth = Math.Clamp(chart.Width * 58 / 100, 90, 260);
         for (var index = 0; index < _data.Count; index++)
         {
             var item = _data[index]; var y = chart.Y + index * rowHeight;
             TextRenderer.DrawText(e.Graphics, item.Label, ChartTextFont, new Rectangle(chart.X, y, labelWidth - 5, rowHeight), Navy, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 25) * item.Value / maximum), Math.Max(7, rowHeight - 10));
+            var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 44) * item.Value / maximum), Math.Max(7, rowHeight - 10));
             using var brush = new SolidBrush(UiTheme.Accent);
             e.Graphics.FillRectangle(brush, bar);
-            TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 22, rowHeight), Muted, TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 40, rowHeight), Muted, TextFormatFlags.VerticalCenter);
         }
     }
 }

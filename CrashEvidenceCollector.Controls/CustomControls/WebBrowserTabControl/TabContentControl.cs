@@ -29,6 +29,9 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                 SizeMode = TabSizeMode.Fixed
             };
             this.Controls.Add(innerTabControl);
+            // CEC change: the inner TabControl's system frame shows as a pale border around
+            // every pane on a dark theme; widen the page area so pages cover it.
+            CrashEvidenceCollector.Theming.TabControlFrameRemover.Attach(innerTabControl);
         }
 
         public int SelectedIndex

@@ -117,7 +117,11 @@ internal sealed class StatusBandView : Control
         _attentionBounds = bounds;
         using var wash = new SolidBrush(Wash(_status!.Health));
         g.FillRectangle(wash, bounds);
-        TextRenderer.DrawText(g, headline, AttentionFont, Rectangle.Inflate(bounds, -12, 0), HealthColor(_status.Health),
+        // Colour carries the meaning in a solid bar; the words use the strongest text colour.
+        // Health-coloured text on a wash of the same colour is unreadable on a dark theme.
+        using (var bar = new SolidBrush(HealthColor(_status.Health)))
+            g.FillRectangle(bar, bounds.X, bounds.Y, 3, bounds.Height);
+        TextRenderer.DrawText(g, headline, AttentionFont, new Rectangle(bounds.X + 14, bounds.Y, bounds.Width - 24, bounds.Height), UiTheme.InkStrong,
             TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
