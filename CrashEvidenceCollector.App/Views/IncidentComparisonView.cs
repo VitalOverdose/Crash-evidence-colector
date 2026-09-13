@@ -12,6 +12,9 @@ internal sealed class IncidentComparisonView : UserControl
     private readonly Label _status = new() { AutoSize = true, ForeColor = UiTheme.Muted, Padding = new Padding(10, 10, 0, 0) };
     private readonly List<Incident> _incidents = [];
 
+    /// <summary>How many incidents the board holds. Adding more drops the oldest.</summary>
+    public const int Capacity = 4;
+
     public IncidentComparisonView()
     {
         Dock = DockStyle.Fill;
@@ -33,7 +36,7 @@ internal sealed class IncidentComparisonView : UserControl
     public void Add(Incident incident)
     {
         if (_incidents.Any(item => item.Id.Equals(incident.Id, StringComparison.Ordinal))) return;
-        if (_incidents.Count == 4) _incidents.RemoveAt(0);
+        if (_incidents.Count == Capacity) _incidents.RemoveAt(0);
         _incidents.Add(incident);
         Render();
     }
@@ -63,14 +66,14 @@ internal sealed class IncidentComparisonView : UserControl
         {
             Dock = DockStyle.Fill,
             ForeColor = UiTheme.Muted,
-            Font = new Font("Segoe UI", 9f),
+            Font = new Font("Segoe UI", 11f),
             Text = $"{incident.Timestamp.ToLocalTime():ddd d MMM yyyy, HH:mm:ss}\r\n\r\n{CodeDecoder.DescribeIncident(incident)}\r\n\r\nSource: {incident.Source}",
             AutoEllipsis = true
         };
         // Two lines at this size, so the number and its plain-English answer both fit.
-        var code = new Label { Dock = DockStyle.Top, Height = 46, Text = CodeDecoder.BugCheckHeadline(incident.BugCheckCode), Font = new Font("Cascadia Mono", 8.5f, FontStyle.Bold), ForeColor = UiTheme.KindColor(incident.Kind), AutoEllipsis = true };
+        var code = new Label { Dock = DockStyle.Top, Height = 60, Text = CodeDecoder.BugCheckHeadline(incident.BugCheckCode), Font = new Font("Cascadia Mono", 11f, FontStyle.Bold), ForeColor = UiTheme.KindColor(incident.Kind), AutoEllipsis = true };
         var title = new Label { Dock = DockStyle.Top, Height = 48, Text = incident.Title, Font = new Font("Segoe UI Semibold", 12f), ForeColor = UiTheme.Ink, AutoEllipsis = true };
-        var kind = new Label { Dock = DockStyle.Top, Height = 25, Text = UiTheme.KindLabel(incident.Kind).ToUpperInvariant(), Font = new Font("Segoe UI Semibold", 8f), ForeColor = UiTheme.KindColor(incident.Kind) };
+        var kind = new Label { Dock = DockStyle.Top, Height = 25, Text = UiTheme.KindLabel(incident.Kind).ToUpperInvariant(), Font = new Font("Segoe UI Semibold", 9f), ForeColor = UiTheme.KindColor(incident.Kind) };
         card.Controls.Add(details);
         card.Controls.Add(remove);
         card.Controls.Add(open);

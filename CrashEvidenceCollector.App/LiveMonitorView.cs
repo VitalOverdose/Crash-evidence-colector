@@ -63,7 +63,7 @@ internal sealed class LiveMonitorView : UserControl
 
         var eventsPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(8) };
         eventsPanel.Controls.Add(_events);
-        eventsPanel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 22, Text = "Hardware events captured live (WHEA, thermal, power)", Font = new Font("Segoe UI Semibold", 10), ForeColor = Color.FromArgb(20, 35, 59) });
+        eventsPanel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = "Hardware events captured live (WHEA, thermal, power)", Font = new Font("Segoe UI Semibold", 11), ForeColor = Color.FromArgb(20, 35, 59) });
         root.Controls.Add(eventsPanel, 0, 3);
         Controls.Add(root);
 
@@ -159,7 +159,7 @@ internal sealed class LiveMonitorView : UserControl
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
         panel.Controls.Add(value);
-        panel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 24, Text = title, ForeColor = Color.FromArgb(88, 101, 118), Font = new Font("Segoe UI", 9.5f), AutoEllipsis = true });
+        panel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = title, ForeColor = Color.FromArgb(88, 101, 118), Font = new Font("Segoe UI", 11f), AutoEllipsis = true });
         return panel;
     }
 

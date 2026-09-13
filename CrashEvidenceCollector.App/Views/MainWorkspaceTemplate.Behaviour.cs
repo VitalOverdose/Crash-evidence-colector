@@ -59,7 +59,6 @@ public partial class MainWorkspaceTemplate
         virtualIconButton8.ForeColor = UiTheme.Muted;
         timelineList.BackColor = UiTheme.Surface;
         timelineList.ForeColor = UiTheme.Ink;
-        timelineList.Font = new Font("Segoe UI", 9.2f);
         timelineList.ShowItemToolTips = true;
         timelineList.HideSelection = false;
         rowNavigation.BackColor = UiTheme.Surface;

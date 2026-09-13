@@ -25,7 +25,7 @@ public sealed class ReportView : UserControl
 
     public ReportView()
     {
-        Font = new Font("Segoe UI", 9.5f);
+        Font = new Font("Segoe UI", 11f);
         Dock = DockStyle.Fill;
         Controls.Add(_view);
     }

@@ -17,10 +17,10 @@ namespace CrashEvidenceCollector.App.Views;
 /// </summary>
 internal sealed class StatusBandView : Control
 {
-    private static readonly Font LabelFont = new("Segoe UI", 7.6f, FontStyle.Regular);
-    private static readonly Font ValueFont = new("Cascadia Mono", 10f, FontStyle.Regular);
-    private static readonly Font HealthFont = new("Segoe UI Semibold", 12.5f);
-    private static readonly Font AttentionFont = new("Segoe UI", 9f);
+    private static readonly Font LabelFont = new("Segoe UI", 9f, FontStyle.Regular);
+    private static readonly Font ValueFont = new("Cascadia Mono", 11f, FontStyle.Regular);
+    private static readonly Font HealthFont = new("Segoe UI Semibold", 13f);
+    private static readonly Font AttentionFont = new("Segoe UI", 11f);
 
     private MachineStatusSnapshot? _status;
     private readonly ToolTip _tips = new() { AutoPopDelay = 20000, InitialDelay = 350, ReshowDelay = 120 };
@@ -38,7 +38,7 @@ internal sealed class StatusBandView : Control
         // the surrounding layout engine needs; everything here is measured instead.
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         Dock = DockStyle.Top;
-        Height = 62;
+        Height = 70;
         BackColor = UiTheme.Surface;
         Cursor = Cursors.Default;
     }
@@ -79,16 +79,16 @@ internal sealed class StatusBandView : Control
 
         var x = 18;
         _lastSevenDaysBounds = Rectangle.Empty;
-        TextRenderer.DrawText(g, "STATUS", LabelFont, new Point(x, 14), UiTheme.Faint);
+        TextRenderer.DrawText(g, "STATUS", LabelFont, new Point(x, 12), UiTheme.Faint);
         var healthText = MachineStatusBuilder.HealthLabel(health);
-        TextRenderer.DrawText(g, healthText, HealthFont, new Point(x - 1, 28), accent);
+        TextRenderer.DrawText(g, healthText, HealthFont, new Point(x - 1, 32), accent);
         x += Math.Max(118, TextRenderer.MeasureText(healthText, HealthFont).Width + 24);
 
         foreach (var reading in _status?.Readings ?? [])
         {
             using (var divider = new Pen(UiTheme.Border)) g.DrawLine(divider, x - 12, 16, x - 12, Height - 16);
-            TextRenderer.DrawText(g, reading.Label.ToUpperInvariant(), LabelFont, new Point(x, 14), UiTheme.Faint);
-            TextRenderer.DrawText(g, reading.Value, ValueFont, new Point(x - 1, 29), SeverityColor(reading.Severity));
+            TextRenderer.DrawText(g, reading.Label.ToUpperInvariant(), LabelFont, new Point(x, 12), UiTheme.Faint);
+            TextRenderer.DrawText(g, reading.Value, ValueFont, new Point(x - 1, 33), SeverityColor(reading.Severity));
             var width = Math.Max(TextRenderer.MeasureText(reading.Label.ToUpperInvariant(), LabelFont).Width,
                                  TextRenderer.MeasureText(reading.Value, ValueFont).Width);
             if (reading.Label.Equals("Last 7 days", StringComparison.OrdinalIgnoreCase))

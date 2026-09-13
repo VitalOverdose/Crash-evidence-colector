@@ -20,7 +20,7 @@ partial class RawDebuggerView
         outputBox.BackColor = Color.FromArgb(17, 28, 45);
         outputBox.BorderStyle = BorderStyle.None;
         outputBox.Dock = DockStyle.Fill;
-        outputBox.Font = new Font("Consolas", 9F);
+        outputBox.Font = new Font("Consolas", 11F);
         outputBox.ForeColor = Color.FromArgb(220, 232, 248);
         outputBox.Location = new Point(4, 4);
         outputBox.Name = "outputBox";

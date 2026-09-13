@@ -6,13 +6,13 @@ namespace CrashEvidenceCollector.App.Views;
 internal sealed class IncidentDetailView : UserControl
 {
     private readonly Panel _accent = new() { Dock = DockStyle.Left, Width = 5 };
-    private readonly Label _eyebrow = new() { Dock = DockStyle.Top, Height = 22, Font = new Font("Segoe UI Semibold", 8.5f), ForeColor = UiTheme.Accent };
+    private readonly Label _eyebrow = new() { Dock = DockStyle.Top, Height = 24, Font = new Font("Segoe UI Semibold", 9f), ForeColor = UiTheme.Accent };
     private readonly Label _title = new() { Dock = DockStyle.Top, Height = 32, Font = new Font("Segoe UI Semibold", 14.5f), ForeColor = UiTheme.Ink, AutoEllipsis = true };
-    private readonly Label _code = new() { Dock = DockStyle.Top, Height = 44, Font = new Font("Cascadia Mono", 10f, FontStyle.Bold), ForeColor = UiTheme.Danger, AutoEllipsis = true };
-    private readonly Label _meaning = new() { Dock = DockStyle.Top, Height = 62, Font = new Font("Segoe UI", 9.5f), ForeColor = UiTheme.Ink };
-    private readonly Label _metadata = new() { Dock = DockStyle.Top, Height = 76, Font = new Font("Segoe UI", 8.8f), ForeColor = UiTheme.Muted };
-    private readonly Label _related = new() { Dock = DockStyle.Top, Height = 26, Font = new Font("Segoe UI Semibold", 9f), ForeColor = UiTheme.Cyan };
-    private readonly FlowLayoutPanel _actions = new() { Dock = DockStyle.Top, Height = 44, WrapContents = false, Padding = new Padding(0, 5, 0, 0) };
+    private readonly Label _code = new() { Dock = DockStyle.Top, Height = 54, Font = new Font("Cascadia Mono", 11f, FontStyle.Bold), ForeColor = UiTheme.Danger, AutoEllipsis = true };
+    private readonly Label _meaning = new() { Dock = DockStyle.Top, Height = 100, Font = new Font("Segoe UI", 11f), ForeColor = UiTheme.Ink };
+    private readonly Label _metadata = new() { Dock = DockStyle.Top, Height = 140, Font = new Font("Segoe UI", 11f), ForeColor = UiTheme.Muted };
+    private readonly Label _related = new() { Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI Semibold", 11f), ForeColor = UiTheme.Cyan };
+    private readonly FlowLayoutPanel _actions = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 5, 0, 0) };
     private readonly Button _collect = UiTheme.ActionButton("Collect focused evidence", true);
     private readonly Button _compare = UiTheme.ActionButton("Add to comparison");
     private readonly Button _search = UiTheme.ActionButton("Research code");
@@ -33,7 +33,7 @@ internal sealed class IncidentDetailView : UserControl
             Dock = DockStyle.Fill,
             Text = "Raw codes are always retained beside these interpretations. Conclusions remain evidence-weighted and never treat a crash marker as proof of root cause.",
             ForeColor = UiTheme.Faint,
-            Font = new Font("Segoe UI", 8f),
+            Font = new Font("Segoe UI", 9f),
             Padding = new Padding(0, 8, 0, 0)
         });
         body.Controls.Add(_actions);

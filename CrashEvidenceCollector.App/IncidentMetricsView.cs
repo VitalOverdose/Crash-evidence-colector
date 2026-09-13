@@ -21,7 +21,7 @@ internal sealed class IncidentMetricsView : UserControl
     private readonly TopBugCheckChart _codes = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly TopApplicationChart _applications = new() { Dock = DockStyle.Fill, Margin = new Padding(5) };
     private readonly Label _patternTitle = new() { Dock = DockStyle.Top, Height = 25, Font = new Font("Segoe UI Semibold", 11f), ForeColor = UiTheme.Ink };
-    private readonly Label _patternDetail = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9f), ForeColor = UiTheme.Muted, AutoEllipsis = true };
+    private readonly Label _patternDetail = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), ForeColor = UiTheme.Muted, AutoEllipsis = true };
 
     public IncidentMetricsView()
     {
@@ -105,7 +105,7 @@ internal sealed class IncidentMetricsView : UserControl
     private static Control Card(string title, Label value)
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
-        var caption = new Label { Dock = DockStyle.Top, Height = 24, Text = title, ForeColor = Muted, Font = new Font("Segoe UI", 9.5f), AutoEllipsis = true };
+        var caption = new Label { Dock = DockStyle.Top, Height = 28, Text = title, ForeColor = Muted, Font = new Font("Segoe UI", 11f), AutoEllipsis = true };
         panel.Controls.Add(value);
         panel.Controls.Add(caption);
         return panel;
@@ -154,9 +154,9 @@ internal abstract class MetricsChart : Control
     protected static readonly Color Navy = Color.FromArgb(20, 35, 59);
     protected static readonly Color Muted = Color.FromArgb(88, 101, 118);
     protected static readonly Color Grid = Color.FromArgb(225, 230, 237);
-    protected static readonly Font ChartTitleFont = new("Segoe UI Semibold", 10);
-    protected static readonly Font ChartTextFont = new("Segoe UI", 7.8f);
-    protected static readonly Font ChartTinyFont = new("Segoe UI", 7.2f);
+    protected static readonly Font ChartTitleFont = new("Segoe UI Semibold", 11);
+    protected static readonly Font ChartTextFont = new("Segoe UI", 9f);
+    protected static readonly Font ChartTinyFont = new("Segoe UI", 9f);
     protected static readonly Font ChartValueFont = new("Segoe UI Semibold", 12);
     protected static readonly Color[] SeriesColors =
     [

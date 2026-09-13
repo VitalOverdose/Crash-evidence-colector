@@ -61,18 +61,18 @@ public sealed partial class MainForm
         navigationPanel.Margin = new Padding(2, 2, 2, 2);
         navigationPanel.Name = "navigationPanel";
         navigationPanel.Padding = new Padding(10, 12, 10, 9);
-        navigationPanel.Size = new Size(163, 624);
+        navigationPanel.Size = new Size(240, 624);
         navigationPanel.TabIndex = 2;
         // 
         // collectionSafetyLabel
         // 
         collectionSafetyLabel.Dock = DockStyle.Bottom;
-        collectionSafetyLabel.Font = new Font("Segoe UI", 8.3F);
+        collectionSafetyLabel.Font = new Font("Segoe UI", 11F);
         collectionSafetyLabel.ForeColor = Color.FromArgb(153, 179, 207);
         collectionSafetyLabel.Location = new Point(10, 553);
         collectionSafetyLabel.Margin = new Padding(2, 0, 2, 0);
         collectionSafetyLabel.Name = "collectionSafetyLabel";
-        collectionSafetyLabel.Size = new Size(143, 62);
+        collectionSafetyLabel.Size = new Size(220, 130);
         collectionSafetyLabel.TabIndex = 0;
         collectionSafetyLabel.Text = "●  COLLECTION SAFE\r\n\r\nRead-only analysis. No drivers, services, registry settings, or crash configuration are changed.";
         // 
@@ -83,13 +83,13 @@ public sealed partial class MainForm
         systemSettingsButton.Dock = DockStyle.Top;
         systemSettingsButton.FlatAppearance.BorderSize = 0;
         systemSettingsButton.FlatStyle = FlatStyle.Flat;
-        systemSettingsButton.Font = new Font("Segoe UI Semibold", 8.7F);
+        systemSettingsButton.Font = new Font("Segoe UI Semibold", 11F);
         systemSettingsButton.ForeColor = Color.FromArgb(164, 184, 207);
         systemSettingsButton.Location = new Point(10, 147);
         systemSettingsButton.Margin = new Padding(2, 2, 2, 2);
         systemSettingsButton.Name = "systemSettingsButton";
         systemSettingsButton.Padding = new Padding(9, 0, 0, 0);
-        systemSettingsButton.Size = new Size(143, 34);
+        systemSettingsButton.Size = new Size(220, 44);
         systemSettingsButton.TabIndex = 1;
         systemSettingsButton.Text = "SYSTEM SETTINGS";
         systemSettingsButton.TextAlign = ContentAlignment.MiddleLeft;
@@ -102,13 +102,13 @@ public sealed partial class MainForm
         summaryIntelligenceButton.Dock = DockStyle.Top;
         summaryIntelligenceButton.FlatAppearance.BorderSize = 0;
         summaryIntelligenceButton.FlatStyle = FlatStyle.Flat;
-        summaryIntelligenceButton.Font = new Font("Segoe UI Semibold", 8.7F);
+        summaryIntelligenceButton.Font = new Font("Segoe UI Semibold", 11F);
         summaryIntelligenceButton.ForeColor = Color.FromArgb(164, 184, 207);
         summaryIntelligenceButton.Location = new Point(10, 113);
         summaryIntelligenceButton.Margin = new Padding(2, 2, 2, 2);
         summaryIntelligenceButton.Name = "summaryIntelligenceButton";
         summaryIntelligenceButton.Padding = new Padding(9, 0, 0, 0);
-        summaryIntelligenceButton.Size = new Size(143, 34);
+        summaryIntelligenceButton.Size = new Size(220, 44);
         summaryIntelligenceButton.TabIndex = 2;
         summaryIntelligenceButton.Text = "SUMMARY INTELLIGENCE";
         summaryIntelligenceButton.TextAlign = ContentAlignment.MiddleLeft;
@@ -121,13 +121,13 @@ public sealed partial class MainForm
         commandCenterButton.Dock = DockStyle.Top;
         commandCenterButton.FlatAppearance.BorderColor = Color.FromArgb(37, 112, 202);
         commandCenterButton.FlatStyle = FlatStyle.Flat;
-        commandCenterButton.Font = new Font("Segoe UI Semibold", 8.7F);
+        commandCenterButton.Font = new Font("Segoe UI Semibold", 11F);
         commandCenterButton.ForeColor = Color.White;
         commandCenterButton.Location = new Point(10, 79);
         commandCenterButton.Margin = new Padding(2, 2, 2, 2);
         commandCenterButton.Name = "commandCenterButton";
         commandCenterButton.Padding = new Padding(9, 0, 0, 0);
-        commandCenterButton.Size = new Size(143, 34);
+        commandCenterButton.Size = new Size(220, 44);
         commandCenterButton.TabIndex = 3;
         commandCenterButton.Text = "COMMAND CENTER";
         commandCenterButton.TextAlign = ContentAlignment.MiddleLeft;
@@ -140,19 +140,19 @@ public sealed partial class MainForm
         navigationDivider.Location = new Point(10, 71);
         navigationDivider.Margin = new Padding(2, 2, 2, 2);
         navigationDivider.Name = "navigationDivider";
-        navigationDivider.Size = new Size(143, 8);
+        navigationDivider.Size = new Size(220, 8);
         navigationDivider.TabIndex = 4;
         // 
         // productCaptionLabel
         // 
         productCaptionLabel.Dock = DockStyle.Top;
-        productCaptionLabel.Font = new Font("Segoe UI", 8.5F);
+        productCaptionLabel.Font = new Font("Segoe UI", 11F);
         productCaptionLabel.ForeColor = Color.FromArgb(153, 179, 207);
         productCaptionLabel.Location = new Point(10, 50);
         productCaptionLabel.Margin = new Padding(2, 0, 2, 0);
         productCaptionLabel.Name = "productCaptionLabel";
         productCaptionLabel.Padding = new Padding(1, 3, 0, 0);
-        productCaptionLabel.Size = new Size(143, 21);
+        productCaptionLabel.Size = new Size(220, 28);
         productCaptionLabel.TabIndex = 5;
         productCaptionLabel.Text = "INCIDENT ANALYSIS WORKSPACE";
         // 
@@ -164,7 +164,7 @@ public sealed partial class MainForm
         productNameLabel.Location = new Point(10, 12);
         productNameLabel.Margin = new Padding(2, 0, 2, 0);
         productNameLabel.Name = "productNameLabel";
-        productNameLabel.Size = new Size(143, 38);
+        productNameLabel.Size = new Size(220, 72);
         productNameLabel.TabIndex = 6;
         productNameLabel.Text = "CRASH EVIDENCE\r\nCOLLECTOR";
         // 
@@ -173,10 +173,10 @@ public sealed partial class MainForm
         _modeBanner.BackColor = Color.FromArgb(255, 238, 184);
         _modeBanner.Dock = DockStyle.Top;
         _modeBanner.ForeColor = Color.FromArgb(95, 63, 0);
-        _modeBanner.Location = new Point(163, 0);
+        _modeBanner.Location = new Point(240, 0);
         _modeBanner.Margin = new Padding(2, 0, 2, 0);
         _modeBanner.Name = "_modeBanner";
-        _modeBanner.Size = new Size(1013, 22);
+        _modeBanner.Size = new Size(1360, 34);
         _modeBanner.TabIndex = 1;
         _modeBanner.Text = "MODE / STATUS BANNER — shown for test-data or administrator mode at runtime";
         _modeBanner.TextAlign = ContentAlignment.MiddleCenter;
@@ -189,7 +189,7 @@ public sealed partial class MainForm
         _pages.Controls.Add(settingsDesignPage);
         _pages.Dock = DockStyle.Fill;
         _pages.ItemSize = new Size(0, 1);
-        _pages.Location = new Point(163, 22);
+        _pages.Location = new Point(240, 34);
         _pages.Margin = new Padding(2, 2, 2, 2);
         _pages.Name = "_pages";
         _pages.SelectedIndex = 0;
@@ -235,15 +235,15 @@ public sealed partial class MainForm
         // MainForm
         // 
         AutoScaleDimensions = new SizeF(5F, 11F);
-        AutoScaleMode = AutoScaleMode.Font;
+        AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(242, 245, 249);
-        ClientSize = new Size(1176, 624);
+        ClientSize = new Size(1600, 900);
         Controls.Add(_pages);
         Controls.Add(_modeBanner);
         Controls.Add(navigationPanel);
-        Font = new Font("Segoe UI", 6.33333349F);
+        Font = new Font("Segoe UI", 11F);
         Margin = new Padding(2, 2, 2, 2);
-        MinimumSize = new Size(755, 454);
+        MinimumSize = new Size(1100, 700);
         Name = "MainForm";
         StartPosition = FormStartPosition.CenterScreen;
         Text = "Crash Evidence Collector";
@@ -260,11 +260,11 @@ public sealed partial class MainForm
         button.FlatAppearance.BorderColor = Color.FromArgb(37, 112, 202);
         button.FlatAppearance.BorderSize = active ? 1 : 0;
         button.FlatStyle = FlatStyle.Flat;
-        button.Font = new Font("Segoe UI Semibold", 8.7F);
+        button.Font = new Font("Segoe UI Semibold", 11F);
         button.ForeColor = active ? Color.White : Color.FromArgb(164, 184, 207);
         button.Name = name;
         button.Padding = new Padding(12, 0, 0, 0);
-        button.Size = new Size(200, 52);
+        button.Size = new Size(220, 44);
         button.Text = text;
         button.TextAlign = ContentAlignment.MiddleLeft;
         button.UseVisualStyleBackColor = false;

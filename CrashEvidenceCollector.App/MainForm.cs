@@ -50,7 +50,7 @@ public sealed partial class MainForm : Form
     private readonly CheckBox _filterCollected = new() { Text = "Only incidents with collected evidence", AutoSize = true, Padding = new Padding(0, 6, 10, 0) };
     private readonly TextBox _filterCode = new() { Width = 90, PlaceholderText = "0x1E" };
     private readonly TextBox _filterText = new() { Width = 150, PlaceholderText = "module / text" };
-    private readonly Label _summaryStatus = new() { Dock = DockStyle.Top, Height = 26, ForeColor = Color.FromArgb(75, 85, 99), Text = "Choose a date range and generate a summary of every incident it contains." };
+    private readonly Label _summaryStatus = new() { Dock = DockStyle.Top, Height = 32, ForeColor = Color.FromArgb(75, 85, 99), Text = "Choose a date range and generate a summary of every incident it contains." };
     private CrashSummary? _lastSummary;
     private readonly NumericUpDown _before = new() { Minimum = 1, Maximum = 1440, Value = 10, Width = 90 };
     private readonly NumericUpDown _after = new() { Minimum = 1, Maximum = 1440, Value = 5, Width = 90 };
@@ -80,6 +80,7 @@ public sealed partial class MainForm : Form
     {
         InitializeComponent();
         if (IsDesignerHosted) return;
+        WindowState = FormWindowState.Maximized;
         try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
         ConfigureNavigation();
         Controls.Add(_statusBand);
@@ -149,7 +150,7 @@ public sealed partial class MainForm : Form
         // Docking order in this panel runs bottom-up by child index, so the two new
         // controls are placed explicitly: headline, filters, briefing, splitter, list.
         _incidentView.Dock = DockStyle.Top;
-        _incidentView.Height = 330;
+        _incidentView.Height = 540;
         var timelinePane = _workspace.TimelinePanel;
         timelinePane.Controls.Add(_incidentView);
         timelinePane.Controls.Add(_briefingSplitter);
@@ -157,12 +158,14 @@ public sealed partial class MainForm : Form
         timelinePane.Controls.SetChildIndex(_incidentView, 2);
 
         _tabs = new TabWorkspaceController(_workspace.TabHeaders, _workspace.TabContent, _workspace);
-        _tabs.AddFixedTab("Metrics & trends", _metrics);
+        // Short names: every fixed tab also reserves room for an icon and a close
+        // button, so long titles are what pushed the strip into clipping.
+        _tabs.AddFixedTab("Metrics", _metrics);
         _tabs.AddFixedTab("Compare", _comparisonView);
         _tabs.AddFixedTab("Live monitor", _liveMonitor);
-        _tabs.AddFixedTab("Evidence status", _evidenceView);
-        _tabs.AddFixedTab("Raw debugger output", _rawView);
-        _tabs.AddFixedTab("Readable report", _reportPane);
+        _tabs.AddFixedTab("Evidence", _evidenceView);
+        _tabs.AddFixedTab("Debugger", _rawView);
+        _tabs.AddFixedTab("Report", _reportPane);
         _tabs.AddFixedTab("Help", _helpView);
 
         // Clicking a day in the chart answers "which applications, and why".
@@ -203,20 +206,100 @@ public sealed partial class MainForm : Form
     private void BuildTimelineContextMenu()
     {
         var menu = new ContextMenuStrip { Font = Font };
-        // No "open briefing" item: the briefing is now always on screen above this list.
-        menu.Items.Add("Add to comparison board", null, (_, _) =>
+        // No "open briefing" item: the briefing is always on screen above this list.
+        var copy = new ToolStripMenuItem("Copy", null, (_, _) => CopySelectedIncidents()) { ShortcutKeyDisplayString = "Ctrl+C" };
+        var selectAll = new ToolStripMenuItem("Select all", null, (_, _) => SelectAllIncidents()) { ShortcutKeyDisplayString = "Ctrl+A" };
+        var compare = new ToolStripMenuItem("Add to comparison board", null, (_, _) =>
         {
-            if (_timeline.SelectedItems.Count == 0) return;
-            _comparisonView.Add((Incident)_timeline.SelectedItems[0].Tag!);
+            // The board holds a fixed number. Take the first rows selected, in list
+            // order, rather than silently keeping whichever were added last.
+            var selected = SelectedIncidents().Take(Views.IncidentComparisonView.Capacity).ToList();
+            if (selected.Count == 0) return;
+            foreach (var incident in selected) _comparisonView.Add(incident);
             _tabs.SelectTab(CompareTabIndex);
         });
-        menu.Items.Add("Research code / incident", null, (_, _) =>
+        var research = new ToolStripMenuItem("Research code / incident", null, (_, _) =>
         {
-            if (_timeline.SelectedItems.Count == 0) return;
-            var incident = (Incident)_timeline.SelectedItems[0].Tag!;
+            if (PrimarySelectedIncident() is not { } incident) return;
             _tabs.Search(!string.IsNullOrWhiteSpace(incident.BugCheckCode) ? $"Windows {CodeDecoder.GetBugCheckLabel(incident.BugCheckCode)}" : $"Windows {incident.Title}", true);
         });
+        menu.Items.AddRange([copy, selectAll, new ToolStripSeparator(), compare, research]);
+
+        // Each label says how many rows it will act on, so a multi-row selection
+        // never does more — or less — than the user expects.
+        menu.Opening += (_, _) =>
+        {
+            var count = _timeline.SelectedItems.Count;
+            copy.Text = count > 1 ? $"Copy {count} incidents" : "Copy";
+            copy.Enabled = count > 0;
+            selectAll.Enabled = _timeline.Items.Count > 0;
+            var capacity = Views.IncidentComparisonView.Capacity;
+            compare.Text = count > capacity ? $"Add first {capacity} of {count} to comparison board"
+                : count > 1 ? $"Add {count} incidents to comparison board" : "Add to comparison board";
+            compare.Enabled = count > 0;
+            research.Text = count > 1 ? "Research the clicked incident" : "Research code / incident";
+            research.Enabled = count > 0;
+        };
         _timeline.ContextMenuStrip = menu;
+
+        _timeline.KeyDown += (_, e) =>
+        {
+            if (!e.Control) return;
+            if (e.KeyCode == Keys.C) { e.SuppressKeyPress = true; CopySelectedIncidents(); }
+            else if (e.KeyCode == Keys.A) { e.SuppressKeyPress = true; SelectAllIncidents(); }
+        };
+    }
+
+    /// <summary>The selected incidents, in the order they appear in the list.</summary>
+    private List<Incident> SelectedIncidents() =>
+        _timeline.SelectedItems.Cast<ListViewItem>().OrderBy(row => row.Index).Select(row => (Incident)row.Tag!).ToList();
+
+    /// <summary>
+    /// The one incident a single-target action should use. With several rows
+    /// selected that is the row the user last clicked, not whichever sits highest.
+    /// </summary>
+    private Incident? PrimarySelectedIncident()
+    {
+        if (_timeline.FocusedItem is { Selected: true } focused) return (Incident)focused.Tag!;
+        return _timeline.SelectedItems.Count > 0 ? (Incident)_timeline.SelectedItems[0].Tag! : null;
+    }
+
+    private void SelectAllIncidents()
+    {
+        _timeline.BeginUpdate();
+        try { foreach (ListViewItem row in _timeline.Items) row.Selected = true; }
+        finally { _timeline.EndUpdate(); }
+    }
+
+    /// <summary>
+    /// Copies the selected rows as tab-separated text with a header row. It reads
+    /// cleanly pasted into a message or an RMA form, and lands in a spreadsheet as
+    /// columns. Rows are copied exactly as shown, in list order.
+    /// </summary>
+    private void CopySelectedIncidents()
+    {
+        var rows = _timeline.SelectedItems.Cast<ListViewItem>().OrderBy(row => row.Index).ToList();
+        if (rows.Count == 0) return;
+        var text = new System.Text.StringBuilder();
+        text.AppendLine("When\tType\tCode / incident\tPlain-English meaning\tSource");
+        foreach (var row in rows)
+        {
+            var incident = (Incident)row.Tag!;
+            text.AppendLine(string.Join('\t',
+                incident.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                Clean(row.SubItems[1].Text), Clean(row.SubItems[2].Text), Clean(row.SubItems[3].Text), Clean(row.SubItems[4].Text)));
+        }
+        try
+        {
+            Clipboard.SetText(text.ToString());
+            _progressText.Text = rows.Count == 1 ? "Copied 1 incident to the clipboard." : $"Copied {rows.Count} incidents to the clipboard.";
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            _progressText.Text = "Another program is holding the clipboard. Try copying again.";
+        }
+
+        static string Clean(string value) => value.Replace('\t', ' ').Replace("\r", " ").Replace("\n", " ");
     }
 
     /// <summary>
@@ -250,7 +333,10 @@ public sealed partial class MainForm : Form
             row = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(item => ((Incident)item.Tag!).Id == incident.Id);
         }
         if (row is null) return;
+        // Jumping to one incident replaces a multi-row selection rather than adding to it.
+        _timeline.SelectedItems.Clear();
         row.Selected = true;
+        row.Focused = true;
         row.EnsureVisible();
         _timeline.Focus();
         // Selecting the row updates the briefing in place; there is no tab to switch to.
@@ -293,8 +379,8 @@ public sealed partial class MainForm : Form
         _summarySave.Enabled = false; _summarySave.Click += (_, _) => SaveSummary();
         controls.Controls.Add(_summarySave);
 
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 40, WrapContents = true };
-        filters.Controls.Add(new Label { Text = "Include:", AutoSize = true, Padding = new Padding(0, 6, 8, 0), Font = new Font("Segoe UI Semibold", 9f) });
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 0, 0, 6) };
+        filters.Controls.Add(new Label { Text = "Include:", AutoSize = true, Padding = new Padding(0, 6, 8, 0), Font = new Font("Segoe UI Semibold", 11f) });
         filters.Controls.AddRange([_filterBugChecks, _filterPower, _filterHardware, _filterApplications, _filterCollected]);
         filters.Controls.Add(new Label { Text = "Code:", AutoSize = true, Padding = new Padding(8, 6, 4, 0) });
         filters.Controls.Add(_filterCode);
@@ -403,7 +489,7 @@ public sealed partial class MainForm : Form
     {
         if (_collectionCts is not null) return;
         if (_timeline.SelectedItems.Count == 0) { MessageBox.Show(this, "Select an incident in the timeline first.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-       await SaveSettingsAsync(showConfirmation: false); var incident = (Incident)_timeline.SelectedItems[0].Tag!;
+       await SaveSettingsAsync(showConfirmation: false); var incident = PrimarySelectedIncident()!;
        _collectionCts = new(); ToggleCollecting(true); _evidenceView.Clear();
         _pages.SelectedIndex = 0;
         _tabs.SelectTab(ReportTabIndex);
@@ -447,7 +533,9 @@ public sealed partial class MainForm : Form
 
     private void PopulateTimeline()
     {
-        var selectedId = _timeline.SelectedItems.Count > 0 ? ((Incident)_timeline.SelectedItems[0].Tag!).Id : null;
+        // A refresh must not throw away a multi-row selection the user built up.
+        var selectedIds = _timeline.SelectedItems.Cast<ListViewItem>().Select(row => ((Incident)row.Tag!).Id).ToHashSet(StringComparer.Ordinal);
+        var focusedId = PrimarySelectedIncident()?.Id;
         _timeline.Items.Clear();
         var referenceTime = _settings.IsTestDataMode && _incidents.Count > 0 ? _incidents.Max(x => x.Timestamp) : DateTimeOffset.Now;
         var range = SelectedTimelineRange();
@@ -478,9 +566,11 @@ public sealed partial class MainForm : Form
         var headlineText = systemCount == 0 ? $"No system crash incidents in the {rangeLabel}" : $"{systemCount} system incident{(systemCount == 1 ? string.Empty : "s")} in the {rangeLabel}";
         _workspace.ShowTimelineSummary(headlineText, countText);
         if (visible.Count == 0) _incidentView.ShowEmpty(query.Length > 0 ? $"No incidents match “{query}” in this range." : (allIncidents.Count == 0 ? "No matching crash evidence was found in the retained timeline." : "The immediate window is clear. Review past history to inspect older incidents."));
-        var selectedRow = _timeline.Items.Cast<ListViewItem>().FirstOrDefault(row => ((Incident)row.Tag!).Id == selectedId);
-        if (selectedRow is not null) selectedRow.Selected = true;
-        else if (_timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
+        var restored = _timeline.Items.Cast<ListViewItem>().Where(row => selectedIds.Contains(((Incident)row.Tag!).Id)).ToList();
+        foreach (var row in restored) row.Selected = true;
+        if (restored.FirstOrDefault(row => ((Incident)row.Tag!).Id == focusedId) is { } focusedRow) focusedRow.Focused = true;
+        if (restored.Count == 0 && _timeline.Items.Count > 0) _timeline.Items[0].Selected = true;
+        UpdateSelection();
         UpdateMetrics();
         UpdateStatusBand();
     }
@@ -531,8 +621,7 @@ public sealed partial class MainForm : Form
 
     private void UpdateSelection()
     {
-        if (_timeline.SelectedItems.Count == 0) return;
-        var i = (Incident)_timeline.SelectedItems[0].Tag!;
+        if (PrimarySelectedIncident() is not { } i) return;
         var merged = MergedIncidents().All;
         var related = merged.Count(other => other.Id != i.Id && IncidentSignature(other).Equals(IncidentSignature(i), StringComparison.OrdinalIgnoreCase));
         _incidentView.ShowIncident(i, _retainedReportIncidents.Any(saved => saved.Id == i.Id), related);

@@ -32,7 +32,7 @@ internal sealed class ReportLoadingView : UserControl
         AutoSize = true,
         MaximumSize = new Size(520, 0),
         Anchor = AnchorStyles.None,
-        Font = new Font("Segoe UI", 9.5f),
+        Font = new Font("Segoe UI", 11f),
         ForeColor = UiTheme.Muted,
         TextAlign = ContentAlignment.MiddleCenter
     };

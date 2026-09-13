@@ -148,7 +148,7 @@ partial class MainWorkspaceTemplate
         vStackRule6.CollapsedHeight = 179;
         vStackRule6.ControlName = "timelineList";
         vStackRule6.ExpandedHeight = 541;
-        vStackRule6.FontBaselineSizeInPoints = 9F;
+        vStackRule6.FontBaselineSizeInPoints = 11F;
         vStackRule6.HasCustomCollapsedHeight = true;
         vStackRule6.Id = "c35a36f45a114c2ea33777245f403e47";
         vStackRule6.SpecialLayout = ProfessorSnowsVideoDownloader.CustomControls.VStackSpecialLayout.Spring;
@@ -258,7 +258,7 @@ partial class MainWorkspaceTemplate
         timelineList.Columns.AddRange(new ColumnHeader[] { whenColumn, typeColumn, codeColumn, meaningColumn, sourceColumn });
         timelineList.FullRowSelect = true;
         timelineList.Location = new Point(9, 203);
-        timelineList.MultiSelect = false;
+        timelineList.MultiSelect = true;
         timelineList.Name = "timelineList";
         timelineList.Size = new Size(507, 541);
         timelineList.TabIndex = 8;
@@ -441,7 +441,7 @@ partial class MainWorkspaceTemplate
         NumbericUpdownValue.FlatAppearance.MouseDownBackColor = Color.Transparent;
         NumbericUpdownValue.FlatAppearance.MouseOverBackColor = Color.Transparent;
         NumbericUpdownValue.FlatStyle = FlatStyle.Flat;
-        NumbericUpdownValue.Font = new Font("Segoe UI", 10F);
+        NumbericUpdownValue.Font = new Font("Segoe UI", 11F);
         NumbericUpdownValue.ForeColor = Color.FromArgb(31, 31, 31);
         NumbericUpdownValue.HoverBorderColor = Color.Gray;
         NumbericUpdownValue.HoverBorderSize = 0;
@@ -476,7 +476,7 @@ partial class MainWorkspaceTemplate
         virtualIconButton4.FlatAppearance.MouseDownBackColor = Color.Transparent;
         virtualIconButton4.FlatAppearance.MouseOverBackColor = Color.Transparent;
         virtualIconButton4.FlatStyle = FlatStyle.Flat;
-        virtualIconButton4.Font = new Font("Segoe UI", 10F);
+        virtualIconButton4.Font = new Font("Segoe UI", 11F);
         virtualIconButton4.ForeColor = Color.FromArgb(31, 31, 31);
         virtualIconButton4.HoverBorderColor = Color.Gray;
         virtualIconButton4.HoverBorderSize = 0;
@@ -512,7 +512,7 @@ partial class MainWorkspaceTemplate
         virtualIconButton5.DisabledInnerColor = Color.FromArgb(250, 250, 250);
         virtualIconButton5.DisabledTextColor = Color.FromArgb(160, 160, 160);
         virtualIconButton5.DropShadowSize = 6;
-        virtualIconButton5.Font = new Font("Segoe UI", 10F);
+        virtualIconButton5.Font = new Font("Segoe UI", 11F);
         virtualIconButton5.HoverBorderColor = Color.FromArgb(0, 120, 215);
         virtualIconButton5.HoverBorderThickness = 1;
         virtualIconButton5.HoverInnerColor = Color.FromArgb(245, 245, 245);
@@ -548,7 +548,7 @@ partial class MainWorkspaceTemplate
         lbl6.FlatAppearance.MouseDownBackColor = Color.Transparent;
         lbl6.FlatAppearance.MouseOverBackColor = Color.Transparent;
         lbl6.FlatStyle = FlatStyle.Flat;
-        lbl6.Font = new Font("Segoe UI", 10F);
+        lbl6.Font = new Font("Segoe UI", 11F);
         lbl6.ForeColor = Color.FromArgb(31, 31, 31);
         lbl6.HoverBorderColor = Color.Gray;
         lbl6.HoverBorderSize = 0;
@@ -583,7 +583,7 @@ partial class MainWorkspaceTemplate
         lbl7.FlatAppearance.MouseDownBackColor = Color.Transparent;
         lbl7.FlatAppearance.MouseOverBackColor = Color.Transparent;
         lbl7.FlatStyle = FlatStyle.Flat;
-        lbl7.Font = new Font("Segoe UI", 10F);
+        lbl7.Font = new Font("Segoe UI", 11F);
         lbl7.ForeColor = Color.FromArgb(31, 31, 31);
         lbl7.HoverBorderColor = Color.Gray;
         lbl7.HoverBorderSize = 0;
@@ -645,7 +645,7 @@ partial class MainWorkspaceTemplate
         virtualIconButton7.DisabledInnerColor = Color.FromArgb(250, 250, 250);
         virtualIconButton7.DisabledTextColor = Color.FromArgb(160, 160, 160);
         virtualIconButton7.DropShadowSize = 6;
-        virtualIconButton7.Font = new Font("Segoe UI", 10F);
+        virtualIconButton7.Font = new Font("Segoe UI", 11F);
         virtualIconButton7.HoverBorderColor = Color.FromArgb(0, 120, 215);
         virtualIconButton7.HoverBorderThickness = 1;
         virtualIconButton7.HoverInnerColor = Color.FromArgb(245, 245, 245);
@@ -681,7 +681,7 @@ partial class MainWorkspaceTemplate
         virtualIconButton8.FlatAppearance.MouseDownBackColor = Color.Transparent;
         virtualIconButton8.FlatAppearance.MouseOverBackColor = Color.Transparent;
         virtualIconButton8.FlatStyle = FlatStyle.Flat;
-        virtualIconButton8.Font = new Font("Segoe UI", 10F);
+        virtualIconButton8.Font = new Font("Segoe UI", 11F);
         virtualIconButton8.ForeColor = Color.FromArgb(31, 31, 31);
         virtualIconButton8.HoverBorderColor = Color.Gray;
         virtualIconButton8.HoverBorderSize = 0;
@@ -935,7 +935,7 @@ partial class MainWorkspaceTemplate
         // MainWorkspaceTemplate
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
-        AutoScaleMode = AutoScaleMode.Font;
+        AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(246, 248, 251);
         Controls.Add(workspaceSplitter);
         Name = "MainWorkspaceTemplate";

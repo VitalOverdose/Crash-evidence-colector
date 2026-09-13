@@ -50,6 +50,7 @@ internal sealed class TabWorkspaceController
         _content.AddTabPage(pane);
         _tabs.Add(new TabEntry { Pane = pane, Closable = false, Icon = icon });
         _headers.AddTab(title, icon);
+        AlignNewestHeaderFont();
         if (_tabs.Count == 1) SelectTab(0);
     }
 
@@ -61,6 +62,7 @@ internal sealed class TabWorkspaceController
         var entry = new TabEntry { Pane = pane, Closable = true, Web = pane };
         _tabs.Add(entry);
         _headers.AddTab("New tab", null);
+        AlignNewestHeaderFont();
         var index = _tabs.Count - 1;
 
         pane.TitleChanged += (_, title) =>
@@ -108,6 +110,23 @@ internal sealed class TabWorkspaceController
         var entry = _tabs[index];
         _template.ShowNavigationRow(entry.IsWeb);
         if (entry.IsWeb) _template.AddressBox.Text = entry.Web!.Address;
+    }
+
+    /// <summary>
+    /// Gives the newest tab header's text the header's own font. The shell sizes
+    /// each tab by measuring its text in the header font, but draws that text in a
+    /// TextBox whose font is fixed when the header is constructed — before it has a
+    /// parent to inherit from — so measurement and drawing disagree and the text
+    /// clips. Aligning them here fixes that without changing the shell library.
+    /// </summary>
+    private void AlignNewestHeaderFont()
+    {
+        var header = _headers.Controls.Cast<Control>().LastOrDefault(control => control.Controls.OfType<TextBox>().Any());
+        if (header is null) return;
+        foreach (var text in header.Controls.OfType<TextBox>()) text.Font = header.Font;
+        // The header re-centres its text when resized; a net-zero nudge places the taller font correctly.
+        header.Width += 1;
+        header.Width -= 1;
     }
 
     private void OnTabClosing(object? sender, TabHeaderEventArgs e)

@@ -28,7 +28,7 @@ public sealed class DayDetailForm : Form
         MinimizeBox = false;
         MaximizeBox = true;
         Size = new Size(1000, 520);
-        Font = new Font("Segoe UI", 9.5f);
+        Font = new Font("Segoe UI", 11f);
         BackColor = Color.FromArgb(246, 248, 251);
 
         _list.Columns.Add("Time", 90);
