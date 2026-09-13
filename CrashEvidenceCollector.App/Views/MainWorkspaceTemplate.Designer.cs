@@ -148,7 +148,7 @@ partial class MainWorkspaceTemplate
         vStackRule6.CollapsedHeight = 179;
         vStackRule6.ControlName = "timelineList";
         vStackRule6.ExpandedHeight = 541;
-        vStackRule6.FontBaselineSizeInPoints = 11F;
+        vStackRule6.FontBaselineSizeInPoints = 9F;
         vStackRule6.HasCustomCollapsedHeight = true;
         vStackRule6.Id = "c35a36f45a114c2ea33777245f403e47";
         vStackRule6.SpecialLayout = ProfessorSnowsVideoDownloader.CustomControls.VStackSpecialLayout.Spring;
@@ -258,7 +258,6 @@ partial class MainWorkspaceTemplate
         timelineList.Columns.AddRange(new ColumnHeader[] { whenColumn, typeColumn, codeColumn, meaningColumn, sourceColumn });
         timelineList.FullRowSelect = true;
         timelineList.Location = new Point(9, 203);
-        timelineList.MultiSelect = true;
         timelineList.Name = "timelineList";
         timelineList.Size = new Size(507, 541);
         timelineList.TabIndex = 8;
@@ -920,6 +919,7 @@ partial class MainWorkspaceTemplate
         // tabHeadersControl1
         // 
         tabHeadersControl1.BackColor = Color.FromArgb(237, 245, 250);
+        tabHeadersControl1.Font = new Font("Segoe UI Semibold", 11F);
         tabHeadersControl1.HeaderBackColor = Color.FromArgb(237, 245, 250);
         tabHeadersControl1.IconSize = 24;
         tabHeadersControl1.Location = new Point(7, 4);
@@ -934,7 +934,6 @@ partial class MainWorkspaceTemplate
         // 
         // MainWorkspaceTemplate
         // 
-        AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(246, 248, 251);
         Controls.Add(workspaceSplitter);
