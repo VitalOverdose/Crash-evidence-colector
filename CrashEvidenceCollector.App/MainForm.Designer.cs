@@ -30,9 +30,9 @@ public sealed partial class MainForm
     {
         navigationPanel = new Panel();
         collectionSafetyLabel = new Label();
-        systemSettingsButton = new Button();
-        summaryIntelligenceButton = new Button();
-        commandCenterButton = new Button();
+        systemSettingsButton = new CrashEvidenceCollector.Theming.ThemedFlatButton();
+        summaryIntelligenceButton = new CrashEvidenceCollector.Theming.ThemedFlatButton();
+        commandCenterButton = new CrashEvidenceCollector.Theming.ThemedFlatButton();
         navigationDivider = new Panel();
         productCaptionLabel = new Label();
         productNameLabel = new Label();

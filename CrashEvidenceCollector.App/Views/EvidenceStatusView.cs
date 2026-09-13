@@ -20,7 +20,7 @@ public partial class EvidenceStatusView : UserControl
         var row = evidenceList.Items.Add("Waiting for a collection");
         row.SubItems.Add("Idle");
         row.SubItems.Add("Select an incident and choose Collect Evidence. Every evidence category then reports here as it succeeds, warns, or fails — including what could not be collected.");
-        row.ForeColor = Color.FromArgb(88, 101, 118);
+        row.ForeColor = UiTheme.Muted;
     }
 
     public void Clear() => evidenceList.Items.Clear();
@@ -43,10 +43,10 @@ public partial class EvidenceStatusView : UserControl
         item.SubItems[2].Text = detail;
         item.ForeColor = state switch
         {
-            EvidenceState.Failure => Color.Firebrick,
-            EvidenceState.Warning => Color.DarkGoldenrod,
-            EvidenceState.Success => Color.SeaGreen,
-            _ => Color.FromArgb(35, 45, 58)
+            EvidenceState.Failure => UiTheme.Danger,
+            EvidenceState.Warning => UiTheme.Warning,
+            EvidenceState.Success => UiTheme.Success,
+            _ => UiTheme.Ink
         };
     }
 }

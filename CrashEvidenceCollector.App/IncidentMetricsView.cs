@@ -9,8 +9,8 @@ namespace CrashEvidenceCollector.App;
 /// </summary>
 internal sealed class IncidentMetricsView : UserControl
 {
-    private static readonly Color Navy = Color.FromArgb(20, 35, 59);
-    private static readonly Color Muted = Color.FromArgb(88, 101, 118);
+    private static Color Navy => UiTheme.InkStrong;
+    private static Color Muted => UiTheme.Muted;
     private readonly Label _incidents = ValueLabel();
     private readonly Label _bugchecks = ValueLabel();
     private readonly Label _newIncidents = ValueLabel();
@@ -26,7 +26,7 @@ internal sealed class IncidentMetricsView : UserControl
     public IncidentMetricsView()
     {
         Dock = DockStyle.Fill;
-        BackColor = Color.FromArgb(246, 248, 251);
+        BackColor = UiTheme.Canvas;
         Padding = new Padding(6);
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = BackColor };
@@ -104,7 +104,7 @@ internal sealed class IncidentMetricsView : UserControl
 
     private static Control Card(string title, Label value)
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
         var caption = new Label { Dock = DockStyle.Top, Height = 28, Text = title, ForeColor = Muted, Font = new Font("Segoe UI", 11f), AutoEllipsis = true };
         panel.Controls.Add(value);
         panel.Controls.Add(caption);
@@ -151,25 +151,19 @@ internal sealed class TopApplicationChart : MetricsChart
 
 internal abstract class MetricsChart : Control
 {
-    protected static readonly Color Navy = Color.FromArgb(20, 35, 59);
-    protected static readonly Color Muted = Color.FromArgb(88, 101, 118);
-    protected static readonly Color Grid = Color.FromArgb(225, 230, 237);
+    protected static Color Navy => UiTheme.InkStrong;
+    protected static Color Muted => UiTheme.Muted;
+    protected static Color Grid => UiTheme.Border;
     protected static readonly Font ChartTitleFont = new("Segoe UI Semibold", 11);
     protected static readonly Font ChartTextFont = new("Segoe UI", 9f);
     protected static readonly Font ChartTinyFont = new("Segoe UI", 9f);
     protected static readonly Font ChartValueFont = new("Segoe UI Semibold", 12);
-    protected static readonly Color[] SeriesColors =
-    [
-        Color.FromArgb(40, 105, 190),
-        Color.FromArgb(226, 142, 42),
-        Color.FromArgb(197, 67, 67),
-        Color.FromArgb(74, 155, 105)
-    ];
+    protected static Color[] SeriesColors => [UiTheme.Accent, UiTheme.Warning, UiTheme.Danger, UiTheme.Success];
 
     protected MetricsChart()
     {
         DoubleBuffered = true;
-        BackColor = Color.White;
+        BackColor = UiTheme.Surface;
         ForeColor = Navy;
         ResizeRedraw = true;
     }
@@ -326,7 +320,7 @@ internal sealed class TopBugCheckChart : MetricsChart
             var item = _data[index]; var y = chart.Y + index * rowHeight;
             TextRenderer.DrawText(e.Graphics, item.Label, ChartTextFont, new Rectangle(chart.X, y, labelWidth - 5, rowHeight), Navy, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             var bar = new Rectangle(chart.X + labelWidth, y + 5, Math.Max(2, (chart.Width - labelWidth - 25) * item.Value / maximum), Math.Max(7, rowHeight - 10));
-            using var brush = new SolidBrush(Color.FromArgb(76, 132, 204));
+            using var brush = new SolidBrush(UiTheme.Accent);
             e.Graphics.FillRectangle(brush, bar);
             TextRenderer.DrawText(e.Graphics, item.Value.ToString(), ChartTextFont, new Rectangle(bar.Right + 4, y, 22, rowHeight), Muted, TextFormatFlags.VerticalCenter);
         }

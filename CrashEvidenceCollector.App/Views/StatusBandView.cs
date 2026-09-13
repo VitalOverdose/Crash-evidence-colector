@@ -132,9 +132,9 @@ internal sealed class StatusBandView : Control
 
     private static Color Wash(MachineHealth health) => health switch
     {
-        MachineHealth.Stable => Color.FromArgb(236, 247, 241),
-        MachineHealth.Watch or MachineHealth.Degrading => Color.FromArgb(255, 248, 235),
-        MachineHealth.Critical => Color.FromArgb(253, 241, 242),
+        MachineHealth.Stable => UiTheme.Wash(UiTheme.Success),
+        MachineHealth.Watch or MachineHealth.Degrading => UiTheme.Wash(UiTheme.Warning),
+        MachineHealth.Critical => UiTheme.Wash(UiTheme.Danger),
         _ => UiTheme.Canvas
     };
 

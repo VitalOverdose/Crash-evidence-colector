@@ -6,7 +6,7 @@ using ProfessorSnowsVideoDownloader.Composites;
 
 namespace CrashEvidenceCollector.App;
 
-public sealed partial class MainForm : Form
+public sealed partial class MainForm : CrashEvidenceCollector.Theming.ThemedForm
 {
     private readonly Color _nav = UiTheme.Nav;
     private readonly Color _accent = UiTheme.Accent;
@@ -15,7 +15,7 @@ public sealed partial class MainForm : Form
     private readonly Views.IncidentComparisonView _comparisonView = new();
     private readonly List<Button> _navButtons = [];
     private readonly ProgressBar _progress = new() { Dock = DockStyle.Bottom, Height = 8 };
-    private readonly Label _progressText = new() { Dock = DockStyle.Bottom, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(75, 85, 99) };
+    private readonly Label _progressText = new() { Dock = DockStyle.Bottom, Height = 32, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.Muted };
     private readonly Views.EvidenceStatusView _evidenceView = new();
     private readonly Views.RawDebuggerView _rawView = new();
     private readonly Views.ReadableReportView _reportPane = new();
@@ -50,7 +50,7 @@ public sealed partial class MainForm : Form
     private readonly CheckBox _filterCollected = new() { Text = "Only incidents with collected evidence", AutoSize = true, Padding = new Padding(0, 6, 10, 0) };
     private readonly TextBox _filterCode = new() { Width = 90, PlaceholderText = "0x1E" };
     private readonly TextBox _filterText = new() { Width = 150, PlaceholderText = "module / text" };
-    private readonly Label _summaryStatus = new() { Dock = DockStyle.Top, Height = 32, ForeColor = Color.FromArgb(75, 85, 99), Text = "Choose a date range and generate a summary of every incident it contains." };
+    private readonly Label _summaryStatus = new() { Dock = DockStyle.Top, Height = 32, ForeColor = UiTheme.Muted, Text = "Choose a date range and generate a summary of every incident it contains." };
     private CrashSummary? _lastSummary;
     private readonly NumericUpDown _before = new() { Minimum = 1, Maximum = 1440, Value = 10, Width = 90 };
     private readonly NumericUpDown _after = new() { Minimum = 1, Maximum = 1440, Value = 5, Width = 90 };
@@ -81,11 +81,15 @@ public sealed partial class MainForm : Form
         InitializeComponent();
         if (IsDesignerHosted) return;
         WindowState = FormWindowState.Maximized;
+        // The page switcher is a TabControl with hidden tabs; its frame shows as a pale line on dark.
+        CrashEvidenceCollector.Theming.TabControlFrameRemover.Attach(_pages);
         try { using var icoStream = typeof(MainForm).Assembly.GetManifestResourceStream("CrashEvidenceCollector.App.Assets.cec.ico"); if (icoStream is not null) Icon = new Icon(icoStream); } catch { /* branding must never block startup */ }
         ConfigureNavigation();
         Controls.Add(_statusBand);
         _pages.TabPages.Clear();
         _pages.TabPages.Add(BuildWorkspace()); _pages.TabPages.Add(BuildSummaryReport()); _pages.TabPages.Add(BuildSettings());
+        // Rebuilding the pages resets the selection, so the active nav button is restyled afterwards.
+        UpdateNavigationState();
         // Timeline columns are defined in the designer template; adding them here too would duplicate them.
         _timeline.SelectedIndexChanged += (_, _) => UpdateSelection(); _timeline.DoubleClick += (_, _) => UpdateSelection();
         _workspace.FilterChanged += _ => PopulateTimeline();
@@ -123,9 +127,10 @@ public sealed partial class MainForm : Form
         {
             var active = index == _pages.SelectedIndex;
             _navButtons[index].BackColor = active ? UiTheme.NavHover : UiTheme.Nav;
-            _navButtons[index].ForeColor = active ? Color.White : Color.FromArgb(164, 184, 207);
+            _navButtons[index].ForeColor = active ? UiTheme.NavTextActive : UiTheme.NavText;
             _navButtons[index].FlatAppearance.BorderColor = active ? UiTheme.Accent : UiTheme.Nav;
             _navButtons[index].FlatAppearance.BorderSize = active ? 1 : 0;
+            _navButtons[index].FlatAppearance.MouseOverBackColor = UiTheme.NavHover;
         }
     }
 
@@ -359,7 +364,7 @@ public sealed partial class MainForm : Form
     {
         var page = Page();
         var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24) };
-        var viewerPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(2) };
+        var viewerPanel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Padding = new Padding(2) };
         viewerPanel.Controls.Add(_summaryViewer);
 
         var controls = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 58, WrapContents = false, Padding = new Padding(0, 8, 0, 8) };
@@ -437,9 +442,9 @@ public sealed partial class MainForm : Form
         root.Controls.Add(Row("Minutes before incident", _before)); root.Controls.Add(Row("Minutes after incident / startup", _after));
         root.Controls.Add(_analyzeDumps); root.Controls.Add(Row("Debugger timeout (seconds)", _debuggerTimeout));
         root.Controls.Add(_redact); root.Controls.Add(_fullDump);
-        root.Controls.Add(new Label { Text = "Crash dumps can contain passwords, document fragments and other sensitive data. Full dumps are excluded by default.", ForeColor = Color.FromArgb(140, 75, 20), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 10, 0, 14) });
+        root.Controls.Add(new Label { Text = "Crash dumps can contain passwords, document fragments and other sensitive data. Full dumps are excluded by default.", ForeColor = UiTheme.Warning, AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 10, 0, 14) });
         root.Controls.Add(_webLookup);
-        root.Controls.Add(new Label { Text = "Online lookup sends only the names of recently installed programs to the Microsoft winget source to add publisher, version and homepage context. Matches are labelled as online metadata, never as local evidence.", ForeColor = Color.FromArgb(75, 85, 99), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
+        root.Controls.Add(new Label { Text = "Online lookup sends only the names of recently installed programs to the Microsoft winget source to add publisher, version and homepage context. Matches are labelled as online metadata, never as local evidence.", ForeColor = UiTheme.Muted, AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
         root.Controls.Add(_monitorAutoStart);
         root.Controls.Add(_startWithWindows);
         root.Controls.Add(_alwaysElevate);
@@ -448,7 +453,7 @@ public sealed partial class MainForm : Form
             Text = ElevationService.IsElevated
             ? "This instance is running as administrator: protected crash dumps are copied directly and no per-collection prompt appears. Analysis still runs against copied evidence only, and no system setting is ever changed."
             : "This instance runs unelevated (recommended default). Protected dumps are copied by the separate single-purpose helper, which asks for consent once per collection. Running the whole app elevated replaces that with a single prompt when it starts.",
-            ForeColor = Color.FromArgb(75, 85, 99),
+            ForeColor = UiTheme.Muted,
             AutoSize = true,
             MaximumSize = new Size(760, 0),
             Margin = new Padding(0, 4, 0, 8)
@@ -456,12 +461,12 @@ public sealed partial class MainForm : Form
         _elevateNow.Enabled = !ElevationService.IsElevated;
         _elevateNow.Click += (_, _) => RestartElevated();
         root.Controls.Add(_elevateNow);
-        root.Controls.Add(new Label { Text = "Start-with-Windows adds a single startup entry for this app in your user registry (HKCU Run) — the only registry value the app ever writes. Unticking removes it. System diagnostics always remain read-only.", ForeColor = Color.FromArgb(75, 85, 99), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
+        root.Controls.Add(new Label { Text = "Start-with-Windows adds a single startup entry for this app in your user registry (HKCU Run) — the only registry value the app ever writes. Unticking removes it. System diagnostics always remain read-only.", ForeColor = UiTheme.Muted, AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 4, 0, 14) });
         var outputBrowse = SecondaryButton("Browse…"); outputBrowse.Click += (_, _) => BrowseFolder(_output); root.Controls.Add(Row("Output folder", _output, outputBrowse));
         root.Controls.Add(_testMode); var testBrowse = SecondaryButton("Browse…"); testBrowse.Click += (_, _) => BrowseFolder(_testData); root.Controls.Add(Row("Copied sample-log folder", _testData, testBrowse));
-        root.Controls.Add(new Label { Text = "TEST-DATA MODE reads copied XML logs and inventory text from the selected folder. It is clearly labelled and never substitutes sample values into normal collection.", ForeColor = Color.FromArgb(95, 63, 0), AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 8, 0, 14) });
+        root.Controls.Add(new Label { Text = "TEST-DATA MODE reads copied XML logs and inventory text from the selected folder. It is clearly labelled and never substitutes sample values into normal collection.", ForeColor = UiTheme.Warning, AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(0, 8, 0, 14) });
         var save = PrimaryButton("Save settings"); save.Click += async (_, _) => await SaveSettingsAsync(); root.Controls.Add(save);
-        root.Controls.Add(new Label { Text = "Why administrator access?\nThe normal interface always runs unelevated. If Windows denies access to protected minidumps or MEMORY.DMP, a separate signed-boundary helper prompts through UAC and performs only a streamed copy from known dump locations. Declining the prompt simply omits those protected files.", AutoSize = true, MaximumSize = new Size(780, 0), Margin = new Padding(0, 26, 0, 0), ForeColor = Color.FromArgb(75, 85, 99) });
+        root.Controls.Add(new Label { Text = "Why administrator access?\nThe normal interface always runs unelevated. If Windows denies access to protected minidumps or MEMORY.DMP, a separate signed-boundary helper prompts through UAC and performs only a streamed copy from known dump locations. Declining the prompt simply omits those protected files.", AutoSize = true, MaximumSize = new Size(780, 0), Margin = new Padding(0, 26, 0, 0), ForeColor = UiTheme.Muted });
         page.Controls.Add(root); return page;
     }
 
@@ -676,10 +681,10 @@ public sealed partial class MainForm : Form
         Process.Start(new ProcessStartInfo(_lastResult.HtmlPath) { UseShellExecute = true });
     }
     private static void BrowseFolder(TextBox target) { using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : string.Empty, ShowNewFolderButton = true }; if (dialog.ShowDialog() == DialogResult.OK) target.Text = dialog.SelectedPath; }
-    private static Panel Card(Control child) { var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16), Margin = new Padding(0, 6, 0, 6) }; panel.Controls.Add(child); return panel; }
+    private static Panel Card(Control child) { var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Padding = new Padding(16), Margin = new Padding(0, 6, 0, 6) }; panel.Controls.Add(child); return panel; }
     private static TabPage Page() => new() { BackColor = UiTheme.Canvas, Padding = new Padding(0), UseVisualStyleBackColor = false };
-    private static Button PrimaryButton(string text) => new() { Text = text, AutoSize = true, Height = 36, Padding = new Padding(12, 4, 12, 4), BackColor = Color.FromArgb(40, 105, 190), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 10, 0) };
-    internal static Button SecondaryButton(string text) => new() { Text = text, AutoSize = true, Height = 36, Padding = new Padding(10, 4, 10, 4), BackColor = Color.White, FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 10, 0) };
-    private static Button NavButton(string text) => new() { Text = text, Dock = DockStyle.Top, Height = 52, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(164, 184, 207), BackColor = UiTheme.Nav, Padding = new Padding(12, 0, 0, 0), Font = new Font("Segoe UI Semibold", 8.7f), Cursor = Cursors.Hand };
+    private static Button PrimaryButton(string text) => new CrashEvidenceCollector.Theming.ThemedFlatButton() { Text = text, AutoSize = true, Height = 36, Padding = new Padding(12, 4, 12, 4), BackColor = UiTheme.AccentStrong, ForeColor = UiTheme.OnAccent, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderColor = UiTheme.AccentStrong }, Margin = new Padding(0, 0, 10, 0) };
+    internal static Button SecondaryButton(string text) => new CrashEvidenceCollector.Theming.ThemedFlatButton() { Text = text, AutoSize = true, Height = 36, Padding = new Padding(10, 4, 10, 4), BackColor = UiTheme.SurfaceRaised, ForeColor = UiTheme.Ink, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderColor = UiTheme.Border }, Margin = new Padding(0, 0, 10, 0) };
+    private static Button NavButton(string text) => new CrashEvidenceCollector.Theming.ThemedFlatButton() { Text = text, Dock = DockStyle.Top, Height = 52, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderSize = 0 }, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.NavText, BackColor = UiTheme.Nav, Padding = new Padding(12, 0, 0, 0), Font = new Font("Segoe UI Semibold", 8.7f), Cursor = Cursors.Hand };
     private static FlowLayoutPanel Row(string label, params Control[] controls) { var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0, 4, 0, 10) }; row.Controls.Add(new Label { Text = label, Width = 230, Height = 32, TextAlign = ContentAlignment.MiddleLeft }); row.Controls.AddRange(controls); return row; }
 }

@@ -40,7 +40,7 @@ public sealed class WebPageView : UserControl
         // AutoScaleMode.None: the shell's VStack/ARP engine owns scaling.
         AutoScaleMode = AutoScaleMode.None;
         Dock = DockStyle.Fill;
-        BackColor = Color.White;
+        BackColor = UiTheme.Surface;
         Controls.Add(_view);
     }
 

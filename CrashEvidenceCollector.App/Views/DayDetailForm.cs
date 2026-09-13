@@ -7,7 +7,7 @@ namespace CrashEvidenceCollector.App.Views;
 /// "application incidents" is not useful on its own: this names the applications,
 /// the stop codes, and the plain-English meaning of each record.
 /// </summary>
-public sealed class DayDetailForm : Form
+public sealed class DayDetailForm : CrashEvidenceCollector.Theming.ThemedForm
 {
     private readonly ListView _list = new()
     {
@@ -29,7 +29,7 @@ public sealed class DayDetailForm : Form
         MaximizeBox = true;
         Size = new Size(1000, 520);
         Font = new Font("Segoe UI", 11f);
-        BackColor = Color.FromArgb(246, 248, 251);
+        BackColor = UiTheme.Canvas;
 
         _list.Columns.Add("Time", 90);
         _list.Columns.Add("Type", 140);
@@ -45,10 +45,10 @@ public sealed class DayDetailForm : Form
             row.SubItems.Add(CodeDecoder.DescribeIncident(incident));
             row.ForeColor = incident.Kind switch
             {
-                IncidentKind.BugCheck => Color.Firebrick,
-                IncidentKind.PowerLossOrFreeze or IncidentKind.UnexpectedShutdown => Color.DarkGoldenrod,
-                IncidentKind.HardwareError => Color.FromArgb(150, 40, 40),
-                _ => Color.FromArgb(35, 45, 58)
+                IncidentKind.BugCheck => UiTheme.Danger,
+                IncidentKind.PowerLossOrFreeze or IncidentKind.UnexpectedShutdown => UiTheme.Warning,
+                IncidentKind.HardwareError => UiTheme.Hardware,
+                _ => UiTheme.Ink
             };
             _list.Items.Add(row);
         }
@@ -65,7 +65,7 @@ public sealed class DayDetailForm : Form
             Dock = DockStyle.Top,
             Height = 52,
             Padding = new Padding(14, 10, 14, 0),
-            ForeColor = Color.FromArgb(75, 85, 99),
+            ForeColor = UiTheme.Muted,
             Text = Describe(ordered)
         };
         var footer = new Label
@@ -73,11 +73,11 @@ public sealed class DayDetailForm : Form
             Dock = DockStyle.Bottom,
             Height = 30,
             Padding = new Padding(14, 6, 14, 0),
-            ForeColor = Color.FromArgb(120, 132, 148),
+            ForeColor = UiTheme.Faint,
             Text = "Double-click an incident to select it in the timeline. Repeated application failures are context, not proof of a cause."
         };
 
-        var host = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(10) };
+        var host = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Padding = new Padding(10) };
         host.Controls.Add(_list);
         Controls.Add(host);
         Controls.Add(footer);

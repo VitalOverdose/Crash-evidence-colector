@@ -1,43 +1,57 @@
+using CrashEvidenceCollector.Theming;
+
 namespace CrashEvidenceCollector.App;
 
 /// <summary>
-/// Shared visual language for the investigation workspace.  Keeping these values
-/// together prevents each evidence pane from slowly becoming its own mini-app.
+/// Shared visual language for the investigation workspace, expressed as roles read
+/// from the current <see cref="Theme"/>. Views ask for "Surface" or "Danger"; which
+/// colour that is depends on the active theme, not on this file.
 /// </summary>
 internal static class UiTheme
 {
-    public static readonly Color Canvas = Color.FromArgb(242, 245, 249);
-    public static readonly Color Surface = Color.FromArgb(255, 255, 255);
-    public static readonly Color SurfaceRaised = Color.FromArgb(249, 251, 253);
-    public static readonly Color Border = Color.FromArgb(218, 225, 234);
-    public static readonly Color Ink = Color.FromArgb(22, 33, 48);
-    public static readonly Color Muted = Color.FromArgb(91, 104, 122);
-    public static readonly Color Faint = Color.FromArgb(133, 145, 160);
-    public static readonly Color Nav = Color.FromArgb(13, 24, 39);
-    public static readonly Color NavHover = Color.FromArgb(24, 42, 64);
-    public static readonly Color Accent = Color.FromArgb(37, 112, 202);
-    public static readonly Color AccentSoft = Color.FromArgb(230, 240, 252);
-    public static readonly Color Cyan = Color.FromArgb(20, 139, 154);
-    public static readonly Color Warning = Color.FromArgb(190, 116, 25);
-    public static readonly Color Danger = Color.FromArgb(184, 56, 62);
-    public static readonly Color Success = Color.FromArgb(43, 133, 89);
+    private static Theme T => ThemeManager.Current;
+
+    public static Color Canvas => T.Canvas;
+    public static Color Surface => T.Surface;
+    public static Color SurfaceRaised => T.SurfaceRaised;
+    public static Color Input => T.Input;
+    public static Color Border => T.Border;
+    public static Color BorderStrong => T.BorderStrong;
+    public static Color Ink => T.Text;
+    public static Color InkStrong => T.TextStrong;
+    public static Color Muted => T.TextMuted;
+    public static Color Faint => T.TextFaint;
+    public static Color Nav => T.Nav;
+    public static Color NavHover => T.NavActive;
+    public static Color NavText => T.NavText;
+    public static Color NavTextActive => T.NavTextActive;
+    public static Color Accent => T.Accent;
+    public static Color AccentStrong => T.AccentStrong;
+    public static Color AccentSoft => T.AccentSoft;
+    public static Color OnAccent => T.OnAccent;
+    public static Color Cyan => T.Info;
+    public static Color Warning => T.Warning;
+    public static Color Danger => T.Danger;
+    public static Color Success => T.Success;
+    public static Color Hardware => T.Hardware;
+
+    /// <summary>A meaning colour laid thinly over the surface.</summary>
+    public static Color Wash(Color meaning) => T.Wash(meaning);
 
     public static Color KindColor(Core.IncidentKind kind) => kind switch
     {
         Core.IncidentKind.BugCheck => Danger,
-        Core.IncidentKind.HardwareError => Color.FromArgb(153, 73, 180),
+        Core.IncidentKind.HardwareError => Hardware,
         Core.IncidentKind.PowerLossOrFreeze => Warning,
-        Core.IncidentKind.UnexpectedShutdown => Color.FromArgb(205, 137, 38),
+        Core.IncidentKind.UnexpectedShutdown => T.Caution,
         Core.IncidentKind.ApplicationCrash => Accent,
         _ => Muted
     };
 
     public static Color KindWash(Core.IncidentKind kind) => kind switch
     {
-        Core.IncidentKind.BugCheck => Color.FromArgb(253, 241, 242),
-        Core.IncidentKind.HardwareError => Color.FromArgb(249, 242, 252),
-        Core.IncidentKind.PowerLossOrFreeze or Core.IncidentKind.UnexpectedShutdown => Color.FromArgb(255, 248, 235),
-        Core.IncidentKind.ApplicationCrash => Color.FromArgb(240, 247, 254),
+        Core.IncidentKind.BugCheck or Core.IncidentKind.HardwareError or Core.IncidentKind.PowerLossOrFreeze
+            or Core.IncidentKind.UnexpectedShutdown or Core.IncidentKind.ApplicationCrash => Wash(KindColor(kind)),
         _ => Surface
     };
 
@@ -51,17 +65,17 @@ internal static class UiTheme
         _ => kind.ToString()
     };
 
-    public static Button ActionButton(string text, bool primary = false) => new()
+    public static Button ActionButton(string text, bool primary = false) => new ThemedFlatButton()
     {
         Text = text,
         AutoSize = true,
         MinimumSize = new Size(0, 34),
         Padding = new Padding(12, 3, 12, 3),
         FlatStyle = FlatStyle.Flat,
-        BackColor = primary ? Accent : Surface,
-        ForeColor = primary ? Color.White : Ink,
+        BackColor = primary ? AccentStrong : SurfaceRaised,
+        ForeColor = primary ? OnAccent : Ink,
         Cursor = Cursors.Hand,
         Margin = new Padding(0, 0, 8, 0),
-        FlatAppearance = { BorderColor = primary ? Accent : Border, BorderSize = 1 }
+        FlatAppearance = { BorderColor = primary ? AccentStrong : Border, BorderSize = 1, MouseOverBackColor = primary ? Accent : Border }
     };
 }

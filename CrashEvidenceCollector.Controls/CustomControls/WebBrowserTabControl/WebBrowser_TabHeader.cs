@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using CrashEvidenceCollector.Theming;
 
 namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
 {
@@ -18,19 +19,12 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
         private bool _showCloseButton = true;
         private bool _showText = true;
         private int _iconSize = 24;
-        private TextBox textBox = null!;
+        private Rectangle _textRect;
         private Point? _dragStartScreenPoint = null;
         private bool _dragDetachTriggered = false;
         private bool _suppressNextClick = false;
 
-        // Colors
-        private Color _normalBackColor = Color.FromArgb(237, 245, 250);
-        private Color _hoverBackColor = Color.FromArgb(228, 235, 240);
-        private Color _selectedBackColor = Color.White;
-        private Color _borderColor = Color.Gray; // RGB(128, 128, 128)
-        private Color _closeButtonBackColor = Color.FromArgb(230, 235, 240);
-        private Color _closeButtonHoverBackColor = Color.FromArgb(215, 220, 225);
-        private Color _closeXColor = Color.FromArgb(80, 80, 80);
+        // Colours come from ThemeManager.Current at paint time (CEC change).
 
         // Layout
         private Rectangle _iconRect;
@@ -52,21 +46,6 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                      ControlStyles.UserPaint |
                      ControlStyles.ResizeRedraw, true);
             this.Cursor = Cursors.Hand;
-
-            // Create TextBox for text display BEFORE CalculateLayout
-            textBox = new TextBox
-            {
-                BorderStyle = BorderStyle.None,
-                ReadOnly = true,
-                Enabled = false,
-                BackColor = _normalBackColor,
-                ForeColor = this.ForeColor,
-                Font = this.Font,
-                TextAlign = HorizontalAlignment.Left,
-                Cursor = Cursors.Hand,
-                Text = _tabText
-            };
-            this.Controls.Add(textBox);
 
             CalculateLayout();
         }
@@ -97,6 +76,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
 
                 // Clone the new icon to prevent disposal issues
                 _icon = value != null ? (Image)value.Clone() : null;
+                CalculateLayout(); // an icon changes where the title starts
                 this.Invalidate();
             }
         }
@@ -108,7 +88,6 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
             set
             {
                 _tabText = value ?? "New Tab";
-                textBox.Text = _tabText;
                 this.Invalidate();
             }
         }
@@ -151,8 +130,6 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
 
         private void CalculateLayout()
         {
-            if (textBox == null) return; // Safety check
-
             int padding = 5;
             int iconSize = _iconSize;
             int closeSize = 30;
@@ -161,18 +138,15 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
             // Icon on left
             _iconRect = new Rectangle(padding, (this.Height - iconSize) / 2, iconSize, iconSize);
 
-            int currentX = _iconRect.Right + spacing;
+            // A tab without an icon starts its title at the padding instead of after an empty slot.
+            int currentX = _icon != null ? _iconRect.Right + spacing : padding + 4;
 
-            // TextBox in middle - always visible, calculate width based on close button
+            // Title in the middle, sized around the close button
             int textWidth = _showCloseButton ?
                 this.Width - currentX - closeSize - spacing - padding :
                 this.Width - currentX - padding;
 
-            // Position and size TextBox - vertically centered at fixed position
-            int textBoxHeight = textBox.PreferredHeight;
-            textBox.Location = new Point(currentX, (this.Height - textBoxHeight) / 2);
-            textBox.Width = Math.Max(0, textWidth);
-            textBox.Visible = true; // Always visible - let it shrink naturally
+            _textRect = new Rectangle(currentX, 0, Math.Max(0, textWidth), this.Height);
 
             // Close button on right (if showing)
             if (_showCloseButton)
@@ -338,26 +312,27 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
             base.OnPaint(e);
 
             var g = e.Graphics;
+            // The rounded edge anti-aliases into whatever sits behind it; paint that with the
+            // strip's colour so the edge blends into the strip instead of leaving a pale halo.
+            g.Clear(Parent?.BackColor ?? ThemeManager.Current.TabStrip);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             // Determine colors based on state
-            Color backColor = _normalBackColor;
+            Theme theme = ThemeManager.Current;
+            Color backColor = theme.Tab;
             bool drawBorder = false;
 
             if (_isSelected)
             {
-                backColor = _selectedBackColor;
+                backColor = theme.TabSelected;
                 drawBorder = true;
             }
             else if (_isHovered)
             {
-                backColor = _hoverBackColor;
+                backColor = theme.TabHover;
                 drawBorder = false; // No border on hover
             }
-
-            // Update TextBox background to match tab state
-            textBox.BackColor = backColor;
 
             Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
 
@@ -370,7 +345,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                 // Draw border only if selected
                 if (drawBorder)
                 {
-                    using (Pen pen = new Pen(_borderColor, 1))
+                    using (Pen pen = new Pen(theme.TabBorder, 1))
                         g.DrawPath(pen, path);
                 }
             }
@@ -389,10 +364,20 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                 }
             }
 
+            // Title: drawn directly rather than through a disabled TextBox, which Windows
+            // always paints grey. The selected tab reads strongest; the rest recede.
+            if (_showText && !string.IsNullOrEmpty(_tabText) && _textRect.Width > 0)
+            {
+                Color textColor = _isSelected ? theme.TextStrong : _isHovered ? theme.Text : theme.TextMuted;
+                TextRenderer.DrawText(g, _tabText, this.Font, _textRect, textColor,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                    TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            }
+
             // Draw close button (only if showing AND tab is hovered)
             if (_showCloseButton && !_closeRect.IsEmpty && _isHovered)
             {
-                Color closeBackColor = _closeButtonHovered ? _closeButtonHoverBackColor : _closeButtonBackColor;
+                Color closeBackColor = _closeButtonHovered ? theme.BorderStrong : theme.Border;
 
                 // Shrink rect by 2px on all sides
                 Rectangle shrunkRect = new Rectangle(
@@ -409,7 +394,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                 }
 
                 // Draw X - centered in original rect
-                using (Pen pen = new Pen(_closeXColor, 2))
+                using (Pen pen = new Pen(theme.TextMuted, 2))
                 {
                     int offset = 10; // Larger offset = smaller X
                     g.DrawLine(pen,

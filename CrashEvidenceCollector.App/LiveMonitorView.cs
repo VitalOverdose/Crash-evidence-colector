@@ -13,7 +13,7 @@ internal sealed class LiveMonitorView : UserControl
     private readonly SystemMonitorService _service = new();
     private readonly System.Windows.Forms.Timer _refresh = new() { Interval = 2000 };
     private readonly Button _toggle = new() { Text = "Start monitoring", AutoSize = true, Padding = new Padding(10, 4, 10, 4) };
-    private readonly Label _status = new() { AutoSize = true, ForeColor = Color.FromArgb(88, 101, 118), Padding = new Padding(10, 8, 0, 0) };
+    private readonly Label _status = new() { AutoSize = true, ForeColor = UiTheme.Muted, Padding = new Padding(10, 8, 0, 0) };
     private readonly Label _temperature = StatValue();
     private readonly Label _utility = StatValue();
     private readonly Label _clock = StatValue();
@@ -28,7 +28,7 @@ internal sealed class LiveMonitorView : UserControl
     public LiveMonitorView()
     {
         Dock = DockStyle.Fill;
-        BackColor = Color.FromArgb(246, 248, 251);
+        BackColor = UiTheme.Canvas;
         Padding = new Padding(6);
         _events.Columns.Add("Time", 130); _events.Columns.Add("Source / ID", 210); _events.Columns.Add("Hardware event", 560);
 
@@ -61,9 +61,9 @@ internal sealed class LiveMonitorView : UserControl
         charts.Controls.Add(_memoryChart, 2, 0);
         root.Controls.Add(charts, 0, 2);
 
-        var eventsPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(8) };
+        var eventsPanel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Margin = new Padding(5), Padding = new Padding(8) };
         eventsPanel.Controls.Add(_events);
-        eventsPanel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = "Hardware events captured live (WHEA, thermal, power)", Font = new Font("Segoe UI Semibold", 11), ForeColor = Color.FromArgb(20, 35, 59) });
+        eventsPanel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = "Hardware events captured live (WHEA, thermal, power)", Font = new Font("Segoe UI Semibold", 11), ForeColor = UiTheme.InkStrong });
         root.Controls.Add(eventsPanel, 0, 3);
         Controls.Add(root);
 
@@ -115,14 +115,14 @@ internal sealed class LiveMonitorView : UserControl
         LatestSample = latest; SampleUpdated?.Invoke();
         var temperature = latest is null ? null : HwInfoGadgetReader.SelectCpuTemperature(latest);
         _temperature.Text = temperature is null ? "—" : $"{temperature:0} °C" + (latest?.HwInfoSensors is null ? " (ACPI zone)" : string.Empty);
-        _temperature.ForeColor = temperature >= 95 ? Color.Firebrick : temperature >= 85 ? Color.DarkGoldenrod : Color.FromArgb(20, 35, 59);
+        _temperature.ForeColor = temperature >= 95 ? UiTheme.Danger : temperature >= 85 ? UiTheme.Warning : UiTheme.InkStrong;
         _utility.Text = latest?.CpuUtilityPercent is { } utility ? $"{utility:0.0} %" : "—";
         _clock.Text = latest?.CpuEffectiveMhz is { } mhz ? $"{mhz:N0} MHz" : "—";
         _memory.Text = latest is { MemoryLoadPercent: { } load } ? $"{load:0}% · {(latest.CommitPercent is { } commit ? $"{commit:0}%" : "—")}" : "—";
-        _memory.ForeColor = latest?.CommitPercent >= 90 ? Color.Firebrick : Color.FromArgb(20, 35, 59);
+        _memory.ForeColor = latest?.CommitPercent >= 90 ? UiTheme.Danger : UiTheme.InkStrong;
         _tips.SetToolTip(_memory, latest is null ? string.Empty : $"Physical memory load / commit charge. Kernel pool: nonpaged {latest.PoolNonpagedMb?.ToString("N0") ?? "—"} MB, paged {latest.PoolPagedMb?.ToString("N0") ?? "—"} MB.");
         _hardwareEvents.Text = events.Count.ToString("N0");
-        _hardwareEvents.ForeColor = events.Any(record => record.Provider.Contains("WHEA", StringComparison.OrdinalIgnoreCase)) ? Color.Firebrick : Color.FromArgb(20, 35, 59);
+        _hardwareEvents.ForeColor = events.Any(record => record.Provider.Contains("WHEA", StringComparison.OrdinalIgnoreCase)) ? UiTheme.Danger : UiTheme.InkStrong;
 
         _thermalChart.SetData(
             samples.Select(sample => (sample.Timestamp, HwInfoGadgetReader.SelectCpuTemperature(sample))).ToList(),
@@ -143,7 +143,7 @@ internal sealed class LiveMonitorView : UserControl
             var item = new ListViewItem(record.Timestamp.ToLocalTime().ToString("G"));
             item.SubItems.Add($"{record.Provider} / {record.EventId}");
             item.SubItems.Add(record.Summary);
-            if (record.Provider.Contains("WHEA", StringComparison.OrdinalIgnoreCase)) item.ForeColor = Color.Firebrick;
+            if (record.Provider.Contains("WHEA", StringComparison.OrdinalIgnoreCase)) item.ForeColor = UiTheme.Danger;
             _events.Items.Add(item);
         }
         _events.EndUpdate();
@@ -157,9 +157,9 @@ internal sealed class LiveMonitorView : UserControl
 
     private static Control Card(string title, Label value)
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Surface, Margin = new Padding(5), Padding = new Padding(12, 8, 12, 8) };
         panel.Controls.Add(value);
-        panel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = title, ForeColor = Color.FromArgb(88, 101, 118), Font = new Font("Segoe UI", 11f), AutoEllipsis = true });
+        panel.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, Text = title, ForeColor = UiTheme.Muted, Font = new Font("Segoe UI", 11f), AutoEllipsis = true });
         return panel;
     }
 
@@ -168,7 +168,7 @@ internal sealed class LiveMonitorView : UserControl
         Dock = DockStyle.Fill,
         Text = "—",
         TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.FromArgb(20, 35, 59),
+        ForeColor = UiTheme.InkStrong,
         // Sized so a five-card row still fits values like "98 °C" and "38% · 52%".
         Font = new Font("Segoe UI Semibold", 24),
         AutoEllipsis = true
@@ -215,7 +215,7 @@ internal sealed class MonitorLineChart(string title, string unit) : MetricsChart
         float X(DateTimeOffset time) => plot.Left + (float)((time - _primary[0].Time).TotalSeconds / window) * plot.Width;
         float Y(double value) => plot.Bottom - (float)((value - minimum) / (maximum - minimum)) * plot.Height;
 
-        using var markerPen = new Pen(Color.FromArgb(150, 197, 67, 67)) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
+        using var markerPen = new Pen(Color.FromArgb(150, UiTheme.Danger)) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
         foreach (var marker in _markers.Where(time => _primary.Count > 0 && time >= _primary[0].Time))
             e.Graphics.DrawLine(markerPen, X(marker), plot.Top, X(marker), plot.Bottom);
 

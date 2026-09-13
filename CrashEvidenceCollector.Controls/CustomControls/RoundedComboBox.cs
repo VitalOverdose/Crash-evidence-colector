@@ -1215,7 +1215,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
                 : _cachedRect.Right - ArrowZoneWidth;
             int top = _cachedRect.Top + 5;
             int bottom = _cachedRect.Bottom - 5;
-            using var pen = new Pen(Color.FromArgb(195, 195, 195));
+            using var pen = new Pen(_separatorColor);
             g.DrawLine(pen, x, top, x, bottom);
         }
 
@@ -1867,7 +1867,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
 
                 using (GraphicsPath path = CreateRoundedRectPath(_itemsRect, _owner.CornerRadius))
                 {
-                    using (SolidBrush brush = new SolidBrush(Color.White))
+                    using (SolidBrush brush = new SolidBrush(_owner._innerColor))
                         g.FillPath(brush, path);
 
                     // Match the control's own border so the list looks like part of the button
@@ -1921,7 +1921,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
 
                         if (i == _owner.SelectedIndex)
                         {
-                            using (SolidBrush selBrush = new SolidBrush(Color.FromArgb(240, 244, 252)))
+                            using (SolidBrush selBrush = new SolidBrush(_owner._selectedInnerColor))
                                 g.FillRectangle(selBrush, fillBounds);
                             if (_owner.ShowSelectedCheckmark) DrawSelectedCheckmark(g, itemBounds);
                         }
@@ -1962,7 +1962,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
                     bounds.Width - leftPadding - 10,
                     bounds.Height);
 
-                RoundedComboBox.DrawItemContent(g, item, _owner._itemFont, textRect, Color.FromArgb(31, 31, 31),
+                RoundedComboBox.DrawItemContent(g, item, _owner._itemFont, textRect, _owner.ForeColor,
                     _owner._itemImageSize, hovered, _owner._itemImageHoverGrow);
             }
 
@@ -1974,7 +1974,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
                 int cx = itemBounds.Right - 18;
                 int cy = itemBounds.Top + itemBounds.Height / 2;
 
-                using (Pen pen = new Pen(Color.FromArgb(0, 120, 215), 1.6f))
+                using (Pen pen = new Pen(_owner._selectedBorderColor, 1.6f))
                 {
                     g.DrawLines(pen, new[]
                     {
@@ -2016,7 +2016,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls
                     FormatFlags = StringFormatFlags.NoWrap
                 };
 
-                using SolidBrush brush = new SolidBrush(Color.FromArgb(120, 128, 140));
+                using SolidBrush brush = new SolidBrush(_owner._disabledTextColor);
                 g.DrawString(item.Text, headerFont, brush, textRect, sf);
             }
 

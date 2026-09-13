@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using CrashEvidenceCollector.Theming;
 
 namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
 {
@@ -116,7 +117,7 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
         {
             // Draw separators between tabs
             var g = e.Graphics;
-            using (Pen pen = new Pen(Color.LightGray, 2))
+            using (Pen pen = new Pen(ThemeManager.Current.Border, 2))
             {
                 for (int i = 0; i < tabHeaders.Count - 1; i++)
                 {
@@ -145,14 +146,14 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
             g.Clear(HeaderBackColor);
 
             var rect = new Rectangle(0, 0, newTabButton.Width - 1, newTabButton.Height - 1);
-            Color bgColor = newTabButtonHovered ? Color.FromArgb(228, 235, 240) : Color.FromArgb(237, 245, 250);
+            Color bgColor = newTabButtonHovered ? ThemeManager.Current.TabHover : ThemeManager.Current.Tab;
 
             using (var path = GetRoundedRectPath(rect, 8))
             {
                 using (var brush = new SolidBrush(bgColor))
                     g.FillPath(brush, path);
 
-                using (var pen = new Pen(Color.Gray, 1))
+                using (var pen = new Pen(ThemeManager.Current.TabBorder, 1))
                     g.DrawPath(pen, path);
             }
 
@@ -162,7 +163,8 @@ namespace ProfessorSnowsVideoDownloader.CustomControls.WebBrowserTabControl
                 sf.LineAlignment = StringAlignment.Center;
 
                 var textRect = new RectangleF(-1, 0, newTabButton.ClientRectangle.Width, newTabButton.ClientRectangle.Height);
-                g.DrawString("+", newTabButton.Font, Brushes.Black, textRect, sf);
+                using (var plus = new SolidBrush(ThemeManager.Current.Text))
+                    g.DrawString("+", newTabButton.Font, plus, textRect, sf);
             }
         }
 
