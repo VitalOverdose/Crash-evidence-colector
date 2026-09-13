@@ -3,12 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\CrashEvidenceCollector.Core\CrashEvidenceCollector.Core.csproj" />
     <ProjectReference Include="..\CrashEvidenceCollector.Helper\CrashEvidenceCollector.Helper.csproj" ReferenceOutputAssembly="false" />
-    <!-- Use the live control project so the designer and compiler share the same
-         public custom-control definitions while this UI is being developed. -->
-    <ProjectReference Include="..\..\EliteBrowserShell\EliteBrowserShell.csproj" />
+    <!-- CEC's own copy of the custom controls, taken from EliteBrowserShell so they can
+         be themed here without touching the shell or the browser app. -->
+    <ProjectReference Include="..\CrashEvidenceCollector.Controls\CrashEvidenceCollector.Controls.csproj" />
     <!-- The app's single package: required by the vendored shell's WebView2 composites. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
-    <!-- Design-time only: the shell library's custom controls carry designers that
+    <!-- Design-time only: the custom controls carry designers that
          need this server to render in the Windows Forms designer. PrivateAssets
          keeps it out of the shipped output. -->
     <PackageReference Include="Microsoft.WinForms.Designer.SDK" Version="1.6.0" PrivateAssets="all" />
@@ -20,7 +20,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- The EliteBrowserShell composites' DPI system assumes PerMonitorV2; the WinForms
+    <!-- The custom controls' DPI system assumes PerMonitorV2; the WinForms
          bootstrap otherwise defaults to SystemAware, which silently breaks their scaling. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>Assets\cec.ico</ApplicationIcon>

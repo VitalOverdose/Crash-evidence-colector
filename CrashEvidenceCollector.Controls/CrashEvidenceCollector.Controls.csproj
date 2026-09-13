@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- CEC's own copy of the custom controls it uses, taken from EliteBrowserShell so
+         they can be restyled here without touching the shell or the browser app.
+         Settings mirror the shell library, including its framework, so the move
+         itself changes nothing about how the controls compile or behave. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Donor namespace kept so existing designer files resolve unchanged. -->
+    <RootNamespace>ProfessorSnowsVideoDownloader</RootNamespace>
+    <AssemblyName>CrashEvidenceCollector.Controls</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+    <!-- Design-time only: several controls carry designers that need this server. -->
+    <PackageReference Include="Microsoft.WinForms.Designer.SDK" Version="1.6.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
